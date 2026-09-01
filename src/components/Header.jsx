@@ -32,8 +32,9 @@ export default function Header({
           {partner}
         </span>
 
-        <button className="hpill hicon nudge" onClick={onNudge} title={`bug ${partner} to come play`}>
-          📣
+        <button className="hpill nudge" onClick={onNudge} title={`bug ${partner} to come play`}>
+          <span aria-hidden>📣</span>
+          bug {partner}
         </button>
 
         {showBell && (

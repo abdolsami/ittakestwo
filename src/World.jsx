@@ -272,8 +272,11 @@ export default function World({ identity, onLogout }) {
     )
   }
 
+  // the games menu and the chat tab both use the wider layout.
+  const wide = tab === 'games' || tab === 'chat'
+
   return (
-    <div className="app">
+    <div className={`app ${wide ? 'app-wide' : ''}`}>
       <Header
         identity={identity} partner={partner} partnerOnline={partnerOnline}
         coins={pet.coins} coinPop={coinPop} onLogout={onLogout}
@@ -282,7 +285,7 @@ export default function World({ identity, onLogout }) {
         onEnableNotify={notifyPerm.request}
       />
 
-      <div className="screen" key={tab}>
+      <div className={`screen ${tab === 'chat' ? 'screen-chat' : ''}`} key={tab}>
         {tab === 'home' && (
           <Home
             pet={pet} mood={mood} coinPop={coinPop} feeding={feeding} petting={petting}
@@ -316,6 +319,9 @@ export default function World({ identity, onLogout }) {
           />
         )}
         {tab === 'stats' && <StatsScreen pet={pet} days={days} identity={identity} onReset={handleReset} />}
+        {tab === 'chat' && (
+          <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} docked />
+        )}
       </div>
 
       <Navigation
@@ -324,7 +330,10 @@ export default function World({ identity, onLogout }) {
       />
 
       {levelUp && <LevelUpBurst level={levelUp.level} />}
-      <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} />
+      {/* floating chat bubble on every page except the dedicated chat tab. */}
+      {tab !== 'chat' && (
+        <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} />
+      )}
       <WorldMaintenance />
     </div>
   )

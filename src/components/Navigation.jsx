@@ -4,11 +4,12 @@ const TABS = [
   { id: 'park', label: 'park', icon: '🌳' },
   { id: 'pet', label: 'pet', icon: '🐾' },
   { id: 'stats', label: 'stats', icon: '📊' },
+  { id: 'chat', label: 'chat', icon: '💬' },
 ]
 
 export default function Navigation({ active, onChange }) {
   return (
-    <nav className="nav nav-5">
+    <nav className="nav nav-6">
       {TABS.map((t) => (
         <button
           key={t.id}
