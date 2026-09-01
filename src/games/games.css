@@ -1,0 +1,234 @@
+.game-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.game-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.game-header .g-title {
+  font-family: var(--pixel);
+  font-size: 14px;
+  color: var(--cyan);
+  text-shadow: 0 0 6px rgba(75,224,224,0.5);
+}
+
+.back-btn {
+  font-family: var(--pixel);
+  font-size: 9px;
+  padding: 10px 12px;
+  border: 3px solid #000;
+  background: var(--panel-2);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+}
+
+.score-line {
+  font-family: var(--pixel);
+  font-size: 10px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.score-line b { color: var(--yellow); }
+
+/* ===== wordle ===== */
+.wordle-board {
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+  gap: 6px;
+  margin: 6px 0;
+}
+.wordle-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.wordle-tile {
+  width: 52px;
+  height: 52px;
+  border: 3px solid #3a2a5e;
+  background: #120533;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pixel);
+  font-size: 20px;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.wordle-tile.filled { border-color: var(--purple); animation: tilePop 0.12s steps(2); }
+.wordle-tile.correct { background: var(--green-2); color: #05230a; border-color: #2f8f38; }
+.wordle-tile.present { background: var(--yellow); color: #3a2c00; border-color: #cca62b; }
+.wordle-tile.absent { background: #2a1a44; color: #7a6a9a; border-color: #221436; }
+.wordle-tile.reveal { animation: flip 0.5s ease; }
+
+@keyframes tilePop { 50% { transform: scale(1.08); } }
+@keyframes flip {
+  0% { transform: rotateX(0); }
+  50% { transform: rotateX(90deg); }
+  100% { transform: rotateX(0); }
+}
+.wordle-row.shake { animation: shake 0.4s; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.keyboard { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 440px; }
+.kb-row { display: flex; gap: 4px; justify-content: center; }
+.key {
+  font-family: var(--pixel);
+  font-size: 11px;
+  min-width: 26px;
+  flex: 1;
+  padding: 12px 2px;
+  border: 2px solid #000;
+  background: var(--panel-2);
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+  text-transform: uppercase;
+}
+.key.wide { flex: 1.6; font-size: 8px; }
+.key.correct { background: var(--green-2); color: #05230a; }
+.key.present { background: var(--yellow); color: #3a2c00; }
+.key.absent { background: #1a0f2c; color: #6a5a8a; }
+.key:active { transform: translate(2px, 2px); }
+
+/* ===== canvas games ===== */
+.canvas-stage {
+  border: 4px solid #000;
+  background: #07021a;
+  box-shadow: inset 0 0 24px rgba(0,0,0,0.8), 0 0 18px rgba(75,224,224,0.2);
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+.tetris-layout {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: center;
+}
+.tetris-side { display: flex; flex-direction: column; gap: 12px; }
+.side-box {
+  border: 3px solid #000;
+  background: var(--panel-2);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+  padding: 10px;
+  text-align: center;
+}
+.side-box .k { font-family: var(--pixel); font-size: 8px; color: var(--ink-dim); }
+.side-box .v { font-family: var(--pixel); font-size: 14px; color: var(--cyan); margin-top: 8px; }
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: center;
+}
+.dpad button {
+  font-family: var(--pixel);
+  font-size: 16px;
+  border: 3px solid #000;
+  background: var(--panel-2);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+}
+.dpad button:active { transform: translate(2px,2px); }
+.dpad .wide2 { grid-column: span 3; font-size: 9px; }
+
+.game-over-card {
+  border: 3px solid #000;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--pink), 6px 6px 0 rgba(0,0,0,0.5);
+  padding: 18px;
+  text-align: center;
+  width: min(90vw, 380px);
+}
+.game-over-card .go-title { font-family: var(--pixel); font-size: 16px; color: var(--pink-soft); }
+.game-over-card .go-msg { font-size: 16px; color: var(--ink-dim); margin-top: 12px; line-height: 1.5; }
+.reward-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 16px 0; }
+.reward-list .chip { font-size: 8px; }
+
+.mobile-controls { display: none; }
+
+/* let the game boards scale down to fit any screen while keeping aspect */
+.canvas-stage { max-width: 100%; height: auto; display: block; }
+
+@media (max-width: 620px) {
+  .mobile-controls { display: block; width: 100%; }
+  .mobile-controls .dpad { margin-left: auto; margin-right: auto; }
+
+  /* wordle tiles flex to the available width */
+  .wordle-board { width: 100%; max-width: 340px; }
+  .wordle-row { gap: 5px; }
+  .wordle-tile { width: auto; height: auto; aspect-ratio: 1; font-size: clamp(16px, 8vw, 22px); }
+
+  /* stack the tetris board over its info panel */
+  .tetris-layout { flex-direction: column; align-items: center; width: 100%; }
+  .tetris-layout .canvas-stage { width: min(88vw, 300px); }
+  .tetris-side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  .tetris-side .side-box { flex: 1 1 60px; min-width: 60px; padding: 8px 6px; }
+  .tetris-side .side-box .v { font-size: 12px; }
+
+  .snake-frame { width: min(90vw, 380px); }
+  .snake-frame .canvas-stage { width: 100%; }
+}
+
+@media (max-width: 380px) {
+  .keyboard .key { min-width: 20px; padding: 12px 1px; font-size: 10px; }
+  .keyboard .key.wide { font-size: 7px; }
+}
+
+/* ===== live head-to-head HUD (shown over wordle/tetris/snake) ===== */
+.versus-hud {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 3px solid #000;
+  background: var(--panel-2);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+  padding: 8px 12px;
+  margin-bottom: 4px;
+}
+.versus-hud .vs-side { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 70px; }
+.versus-hud .vs-name { font-family: var(--pixel); font-size: 7px; color: var(--ink-dim); }
+.versus-hud .vs-them .vs-name { color: var(--cyan); }
+.versus-hud .vs-me .vs-name { color: var(--pink-soft); }
+.versus-hud .vs-score { font-family: var(--pixel); font-size: 16px; color: var(--ink); }
+.versus-hud .vs-mid { font-family: var(--pixel); font-size: 9px; color: var(--ink-dim); }
+.versus-hud .vs-mid.vs-result { color: var(--yellow); text-shadow: 0 0 8px rgba(255,216,75,0.6); }
+.versus-hud .vs-live { color: var(--green-2); font-size: 6px; }
+
+/* ===== flappy ===== */
+.flappy-scorebar {
+  width: min(340px, 92vw);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--pixel);
+  font-size: 10px;
+  border: 3px solid #000;
+  background: var(--panel-2);
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+  padding: 8px 12px;
+}
+.flappy-scorebar .fs-me b { color: var(--pink-soft); }
+.flappy-scorebar .fs-them b { color: var(--cyan); }
+.flappy-scorebar .fs-vs { color: var(--ink-dim); font-size: 8px; }
+.flappy-stage { line-height: 0; }
+.flappy-stage .canvas-stage { width: min(340px, 92vw); cursor: pointer; }

@@ -14,7 +14,9 @@ play games → earn rewards → take care of your own pet → meet in the park �
 
 ## two people, one world
 
-- **shared access code** to enter, then pick **mehreenz** or **ali**
+- **each person has their own password** — typing it logs you straight into that account
+  (mehreenz or ali). no shared code, no "who are you?" step. switch people by logging out
+  (click your name in the header) and entering the other password.
 - **each person has their own pet** (name, hunger, happiness, energy, health, xp, level, coins,
   appearance) saved separately — you can only permanently change your *own* pet
 - **you both see each other's pet** and whether the other is **online**
@@ -40,10 +42,11 @@ play games → earn rewards → take care of your own pet → meet in the park �
 ## games — now two-player
 
 - **four games** wired to your pet: 🔤 wordle, 🧱 tetris, 🐍 snake, 🐤 flappy
-- **live head-to-head**: when you're both online, any game shows a **versus scoreboard** at the
-  top so your scores race in realtime
+- **🔤 wordle is co-op** — you both share **one board and one word**: you see each other's
+  letters appear live as you type and take turns guessing to crack it **together**
 - **🐤 flappy is truly two-player** — you both fly through the **same sky / same pipes** at the
   same time and see each other's bird live; when you both crash, a winner is shown
+- **tetris & snake** show a **versus scoreboard** so your scores race head-to-head in realtime
 - tetris now has a smooth **animated hard drop** (the piece falls instead of teleporting)
 - every game still feeds rewards back into your own pet, and high scores are saved forever
 
@@ -70,7 +73,8 @@ different devices, add a free Firebase Realtime Database:
    - copying **`.env.example`** to **`.env`** and filling in the `VITE_FIREBASE_*` values
      (recommended for deploying — no code edits, secrets stay out of the source), **or**
    - pasting them straight into `FIREBASE_CONFIG` in **`src/realtime/config.js`**
-5. (optional) set your own secret via `VITE_ACCESS_CODE` (or edit `ACCESS_CODE` in that file)
+5. set each person's password with `VITE_CODE_MEHREENZ` and `VITE_CODE_ALI` (and keep
+   `VITE_WORLD_ID` the same for both people so you share one world)
 6. lock the database down with the included **`database.rules.json`** (Realtime Database → Rules
    → paste → publish) so only your world path is readable/writable
 

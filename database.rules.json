@@ -1,0 +1,21 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "worlds": {
+      "$world": {
+        ".read": true,
+        ".write": true,
+        "chat": {
+          ".indexOn": ["ts"],
+          "$msg": {
+            ".validate": "newData.hasChildren(['from','text','ts'])"
+          }
+        },
+        "events": {
+          ".indexOn": ["ts"]
+        }
+      }
+    }
+  }
+}
