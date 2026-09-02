@@ -7,6 +7,7 @@ import { setParkState, emitEvent, addFriendship } from '../realtime/world'
 import { useNewEvents } from '../hooks/useWorldEvents'
 import { moodFromSnapshot } from '../utils/petText'
 import { friendshipLevel, UNLOCKS, randomMeet, giftById } from '../utils/social'
+import { isTypingInField } from '../utils/keys'
 
 // play-area bounds in percent of the park.
 const BOUNDS = { minX: 8, maxX: 92, minY: 48, maxY: 86 }
@@ -105,12 +106,14 @@ export default function PetPark({
       ArrowDown: 'down', s: 'down', S: 'down',
     }
     const down = (e) => {
+      if (isTypingInField(e)) return
       const d = KEY[e.key]
       if (!d) return
       e.preventDefault()
       held.current.add(d)
     }
     const up = (e) => {
+      if (isTypingInField(e)) return
       const d = KEY[e.key]
       if (!d) return
       held.current.delete(d)

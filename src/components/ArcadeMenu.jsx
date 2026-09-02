@@ -12,7 +12,7 @@ export default function ArcadeMenu({ pet, onSelect, identity = 'you', partner, p
       {partner && (
         <p className={`versus-note ${partnerOnline ? 'on' : ''}`}>
           {partnerOnline
-            ? `${partner} is online — flappy & wordle are two-player! tetris and snake race head-to-head.`
+            ? `${partner} is online — tetris, snake, flappy & wordle are two-player!`
             : `${partner} is away — play solo, or wait for them to play together.`}
         </p>
       )}
@@ -29,7 +29,7 @@ export default function ArcadeMenu({ pet, onSelect, identity = 'you', partner, p
         />
         <GameCard
           title="tetris"
-          desc="clear the lines"
+          desc="2P · one block each"
           emoji="🧱"
           highScore={pet.highScores?.tetris || 0}
           topColor="var(--cyan)"
@@ -38,7 +38,7 @@ export default function ArcadeMenu({ pet, onSelect, identity = 'you', partner, p
         />
         <GameCard
           title="snake"
-          desc="grow as long as you can"
+          desc="same arena · touch = both die"
           emoji="🐍"
           highScore={pet.highScores?.snake || 0}
           topColor="var(--yellow)"
@@ -47,7 +47,7 @@ export default function ArcadeMenu({ pet, onSelect, identity = 'you', partner, p
         />
         <GameCard
           title="flappy"
-          desc="two-player · same sky"
+          desc="two-player · one falls, both restart"
           emoji="🐤"
           highScore={pet.highScores?.flappy || 0}
           topColor="var(--pink)"

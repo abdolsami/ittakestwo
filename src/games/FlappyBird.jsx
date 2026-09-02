@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { flappyReward } from '../utils/rewards'
 import { useRealtime, useWatch, usePartnerOnline } from '../realtime/RealtimeContext'
+import { usePlayTogether } from '../hooks/usePlayTogether'
+import PlayInvite from '../components/PlayInvite'
 import { setFlappySession, setFlappyBird, clearFlappyBird } from '../realtime/world'
 import { getAnimal } from '../utils/animals'
+import { isTypingInField } from '../utils/keys'
 import './games.css'
 
 // ---- world constants (shared by both players so the pipes line up) ----
@@ -39,6 +42,7 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
   const rt = useRealtime()
   const partner = rt.partner
   const partnerOnline = usePartnerOnline()
+  const { ask, together, solo, playTogether, playSolo } = usePlayTogether('flappy')
   const session = useWatch('games/flappy/session')
   const partnerBird = useWatch(`games/flappy/birds/${partner}`)
 
@@ -58,17 +62,20 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
   partnerBirdRef.current = partnerBird
   const partnerOnlineRef = useRef(partnerOnline)
   partnerOnlineRef.current = partnerOnline
+  const startRoundRef = useRef(() => {})
+  const pendingRestartRef = useRef(false)
+  const duoRef = useRef(false)
 
   const [phase, setPhase] = useState('idle') // idle | running | dead | over
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(highScore || 0)
   const [reward, setReward] = useState(null)
-  const [countdown, setCountdown] = useState(0)
 
   const myColor = (getAnimal(mySpecies)?.body) || '#ffd84b'
   const partnerColor = '#4be0e0'
 
   const publish = useCallback((force) => {
+    if (!duoRef.current) return
     const now = Date.now()
     if (!force && now - lastPubRef.current < 80) return
     lastPubRef.current = now
@@ -96,10 +103,18 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
     if (!aliveRef.current) return
     aliveRef.current = false
     publish(true)
-    setPhase('dead')
+    setBest((b) => Math.max(b, scoreRef.current))
+    const pb = partnerBirdRef.current
+    const partnerInRound = duoRef.current && Boolean(pb && pb.round === roundRef.current && partnerOnlineRef.current)
+    if (partnerInRound) {
+      pendingRestartRef.current = true
+    } else {
+      setPhase('dead')
+    }
   }, [publish])
 
-  const beginRound = useCallback((seed, startAt, round) => {
+  const beginRound = useCallback((seed, startAt, round, withPartner = false) => {
+    duoRef.current = withPartner
     seedRef.current = seed
     startAtRef.current = startAt
     roundRef.current = round
@@ -114,22 +129,25 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
     publish(true)
   }, [publish])
 
-  // start (or restart) a shared round — both players begin together.
   const startRound = useCallback(() => {
-    const round = ((session && session.round) || roundRef.current || 0) + 1
+    const withPartner = together || (!solo && partnerOnline)
+    const round = Math.max(Date.now(), (session && session.round) || 0, roundRef.current) + 1
     const seed = (Math.floor(Math.random() * 0xffffffff)) >>> 0
     const startAt = Date.now() + COUNTDOWN
-    beginRound(seed, startAt, round)
-    setFlappySession(rt, { seed, startAt, round, by: rt.identity })
-  }, [rt, session, beginRound])
+    pendingRestartRef.current = false
+    beginRound(seed, startAt, round, withPartner)
+    if (withPartner) setFlappySession(rt, { seed, startAt, round, by: rt.identity })
+  }, [rt, session, beginRound, together, solo, partnerOnline])
+  startRoundRef.current = startRound
 
-  // if my partner starts a round, join it.
   useEffect(() => {
+    if (!together) return
     if (!session || session.round == null) return
-    if (session.round > roundRef.current) {
-      beginRound(session.seed, session.startAt, session.round)
-    }
-  }, [session, beginRound])
+    if (session.round <= roundRef.current) return
+    const partnerInRound = partnerBird && partnerBird.round === session.round
+    if (!partnerInRound && session.startAt && Date.now() > session.startAt + 8000) return
+    beginRound(session.seed, session.startAt, session.round, true)
+  }, [together, session, beginRound, partnerBird])
 
   // resolve the round once I'm dead and my partner is done (or not in this round).
   useEffect(() => {
@@ -148,6 +166,7 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
   // input
   useEffect(() => {
     const key = (e) => {
+      if (isTypingInField(e)) return
       if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') {
         e.preventDefault()
         flap()
@@ -217,7 +236,7 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
 
     // partner bird (ghost) — smoothed toward the latest reported y
     const pb = partnerBirdRef.current
-    if (pb && pb.round === roundRef.current && partnerOnlineRef.current) {
+    if (duoRef.current && pb && pb.round === roundRef.current && partnerOnlineRef.current) {
       partnerYRef.current += ((pb.y ?? partnerYRef.current) - partnerYRef.current) * 0.3
       drawBird(ctx, BIRD_X - 20, partnerYRef.current, partnerColor, pb.alive === false, true)
     }
@@ -252,6 +271,10 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
         }
         publish(false)
       }
+      if (pendingRestartRef.current) {
+        pendingRestartRef.current = false
+        startRoundRef.current()
+      }
       draw()
       rafRef.current = requestAnimationFrame(loop)
     }
@@ -268,10 +291,11 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
     <div className="game-wrap screen-enter">
       <div className="game-header">
         <button className="back-btn" onClick={onExit}>‹ back</button>
-        <span className="g-title">flappy</span>
+        <span className="g-title">flappy{together || (!solo && partnerOnline) ? ' · 2P' : ''}</span>
         <span className="score-line"><b>{best}</b> best</span>
       </div>
 
+      {(together || (!solo && partnerOnline)) && (
       <div className="flappy-scorebar">
         <span className="fs-me">you <b>{score}</b></span>
         <span className="fs-vs">vs</span>
@@ -279,19 +303,25 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
           {partner} <b>{partnerScore == null ? (partnerOnline ? '—' : 'away') : partnerScore}</b>
         </span>
       </div>
+      )}
 
       <div className="flappy-stage" style={{ position: 'relative' }} onPointerDown={flap}>
         <canvas ref={canvasRef} className="canvas-stage" width={WIDTH} height={HEIGHT} />
 
-        {(phase === 'idle') && (
+        {ask && (
+          <div className="overlay" style={{ position: 'absolute', background: 'rgba(4,1,15,0.78)' }}>
+            <PlayInvite game="flappy" partner={partner} onTogether={playTogether} onSolo={playSolo} />
+          </div>
+        )}
+        {(phase === 'idle') && !ask && (
           <div className="overlay" style={{ position: 'absolute', background: 'rgba(4,1,15,0.72)' }}>
             <div className="game-over-card">
               <div className="go-title">flappy</div>
               <div className="go-msg">
                 tap / space to flap through the pipes.<br />
-                {partnerOnline
-                  ? `${partner} is online — you'll fly the same world together!`
-                  : `${partner} is away — you'll fly solo (they can join live).`}
+                {solo || !partnerOnline
+                  ? 'play solo.'
+                  : `${partner} is online — same sky. if one of you falls, you both restart.`}
               </div>
               <button className="btn btn-yellow mt-16" onClick={startRound}>start</button>
             </div>

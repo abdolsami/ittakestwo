@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isValidWord, wordFromSeed } from '../utils/words'
 import { wordleReward } from '../utils/rewards'
+import { isTypingInField } from '../utils/keys'
 import { useRealtime, useWatch, usePartnerOnline } from '../realtime/RealtimeContext'
+import { usePlayTogether } from '../hooks/usePlayTogether'
+import PlayInvite from '../components/PlayInvite'
 import {
   setWordleSession, setWordleCurrent, pushWordleGuess, clearWordleGuesses,
 } from '../realtime/world'
@@ -47,13 +50,20 @@ export default function Wordle({ onExit, onFinish, highScore }) {
   const identity = rt.identity
   const partner = rt.partner
   const partnerOnline = usePartnerOnline()
+  const { ask, together, solo, playTogether, playSolo } = usePlayTogether('wordle')
 
   const session = useWatch('games/wordle/session')
   const currentShared = useWatch('games/wordle/current')
   const guessesRaw = useWatch('games/wordle/guesses')
 
-  const seed = session ? session.seed : null
-  const round = session ? (session.round || 0) : 0
+  const [hosting, setHosting] = useState(false)
+  const [localSeed, setLocalSeed] = useState(null)
+  const [localRound, setLocalRound] = useState(0)
+  const [localGuesses, setLocalGuesses] = useState([])
+
+  const useShared = (together || hosting) && !solo
+  const seed = useShared && session ? session.seed : localSeed
+  const round = useShared && session ? (session.round || 0) : localRound
   const answer = seed != null ? wordFromSeed(seed) : null
 
   const [current, setCurrent] = useState('')
@@ -68,12 +78,16 @@ export default function Wordle({ onExit, onFinish, highScore }) {
 
   // the shared submitted guesses for THIS round, oldest first, scored.
   const guesses = useMemo(() => {
-    if (!answer || !guessesRaw) return []
+    if (!answer) return []
+    if (!useShared) {
+      return localGuesses.map((word) => ({ word, by: identity, result: scoreGuess(word, answer) }))
+    }
+    if (!guessesRaw) return []
     return Object.values(guessesRaw)
       .filter((g) => g && g.round === round && typeof g.word === 'string')
       .sort((a, b) => (a.ts || 0) - (b.ts || 0))
       .map((g) => ({ word: g.word, by: g.by, result: scoreGuess(g.word, answer) }))
-  }, [guessesRaw, answer, round])
+  }, [guessesRaw, answer, round, useShared, localGuesses, identity])
 
   const status = useMemo(() => {
     if (!answer) return 'idle'
@@ -85,9 +99,10 @@ export default function Wordle({ onExit, onFinish, highScore }) {
   // adopt the shared in-progress row when my PARTNER is the one typing, so I
   // watch their letters appear live. my own keystrokes stay local (snappy).
   useEffect(() => {
+    if (!useShared) return
     if (!currentShared || currentShared.round !== round) return
     if (currentShared.by !== identity) setCurrent(currentShared.text || '')
-  }, [currentShared, round, identity])
+  }, [currentShared, round, identity, useShared])
 
   // whenever a new round starts, clear my local row.
   useEffect(() => { setCurrent(''); prevLenRef.current = guesses.length }, [round]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -128,14 +143,21 @@ export default function Wordle({ onExit, onFinish, highScore }) {
   }, [guesses])
 
   const startRound = useCallback(() => {
-    const nextRound = (session ? (session.round || 0) : 0) + 1
     const nextSeed = (Math.floor(Math.random() * 0xffffffff)) >>> 0
+    setCurrent('')
+    setRevealRow(-1)
+    if (solo) {
+      setLocalSeed(nextSeed)
+      setLocalRound((r) => r + 1)
+      setLocalGuesses([])
+      return
+    }
+    setHosting(true)
+    const nextRound = (session ? (session.round || 0) : 0) + 1
     clearWordleGuesses(rt)
     setWordleCurrent(rt, '', nextRound)
     setWordleSession(rt, { seed: nextSeed, round: nextRound, by: identity })
-    setCurrent('')
-    setRevealRow(-1)
-  }, [rt, session, identity])
+  }, [rt, session, identity, solo])
 
   const submitGuess = useCallback(() => {
     if (status !== 'playing') return
@@ -144,10 +166,15 @@ export default function Wordle({ onExit, onFinish, highScore }) {
       setTimeout(() => setShake(false), 400)
       return
     }
+    if (solo) {
+      setLocalGuesses((g) => [...g, current])
+      setCurrent('')
+      return
+    }
     pushWordleGuess(rt, current, round)
     setWordleCurrent(rt, '', round)
     setCurrent('')
-  }, [status, current, rt, round])
+  }, [status, current, rt, round, solo])
 
   const onKey = useCallback((key) => {
     if (status !== 'playing') return
@@ -156,16 +183,17 @@ export default function Wordle({ onExit, onFinish, highScore }) {
     } else if (key === 'del') {
       const next = current.slice(0, -1)
       setCurrent(next)
-      setWordleCurrent(rt, next, round)
+      if (!solo) setWordleCurrent(rt, next, round)
     } else if (/^[a-z]$/.test(key) && current.length < COLS) {
       const next = current + key
       setCurrent(next)
-      setWordleCurrent(rt, next, round)
+      if (!solo) setWordleCurrent(rt, next, round)
     }
-  }, [status, current, submitGuess, rt, round])
+  }, [status, current, submitGuess, rt, round, solo])
 
   useEffect(() => {
     const handler = (e) => {
+      if (isTypingInField(e)) return
       const k = e.key.toLowerCase()
       if (k === 'enter') { e.preventDefault(); onKey('enter') }
       else if (k === 'backspace') { e.preventDefault(); onKey('del') }
@@ -175,7 +203,7 @@ export default function Wordle({ onExit, onFinish, highScore }) {
     return () => window.removeEventListener('keydown', handler)
   }, [onKey])
 
-  const partnerTyping = currentShared
+  const partnerTyping = useShared && currentShared
     && currentShared.round === round
     && currentShared.by === partner
     && (currentShared.text || '').length > 0
@@ -185,18 +213,22 @@ export default function Wordle({ onExit, onFinish, highScore }) {
     <div className="game-wrap screen-enter">
       <div className="game-header">
         <button className="back-btn" onClick={onExit}>‹ back</button>
-        <span className="g-title">wordle · co-op</span>
+        <span className="g-title">wordle{solo ? '' : ' · co-op'}</span>
         <span className="score-line"><b>{solved}</b> solved</span>
       </div>
 
       <p className="hint center">
-        {status === 'idle'
-          ? `solve one word together with ${partner}`
-          : partnerTyping
-            ? `${partner} is typing…`
-            : partnerOnline
-              ? `solving together with ${partner} — you both share this board`
-              : `${partner} is away — they'll join live when they're back`}
+        {ask
+          ? `${partner} is already playing`
+          : status === 'idle'
+            ? (solo ? 'play your own word' : `solve one word together with ${partner}`)
+            : partnerTyping
+              ? `${partner} is typing…`
+              : useShared && partnerOnline
+                ? `solving together with ${partner} — you both share this board`
+                : solo
+                  ? 'your own word'
+                  : `${partner} is away — they'll join when they open wordle`}
       </p>
 
       <div className="wordle-board">
@@ -230,12 +262,17 @@ export default function Wordle({ onExit, onFinish, highScore }) {
         })}
       </div>
 
-      {status === 'idle' && (
+      {ask && (
+        <PlayInvite game="wordle" partner={partner} onTogether={playTogether} onSolo={playSolo} />
+      )}
+
+      {status === 'idle' && !ask && (
         <div className="game-over-card">
-          <div className="go-title">co-op wordle</div>
+          <div className="go-title">{solo ? 'wordle' : 'co-op wordle'}</div>
           <div className="go-msg">
-            one shared word, one shared board.<br />
-            you both type and guess — see each other&apos;s letters live and crack it together.
+            {solo
+              ? 'your own word, your own board.'
+              : <>one shared word, one shared board.<br />you both type and guess — see each other&apos;s letters and crack it together.</>}
           </div>
           <button className="btn btn-green mt-16" onClick={startRound}>start a word</button>
         </div>
@@ -244,7 +281,10 @@ export default function Wordle({ onExit, onFinish, highScore }) {
       {status === 'won' && (
         <div className="game-over-card">
           <div className="go-title">you solved it together!</div>
-          <div className="go-msg">the word was <b style={{ color: 'var(--green-2)' }}>{answer}</b>.<br />you both got happiness, food, xp and coins.</div>
+          <div className="go-msg">
+            the word was <b style={{ color: 'var(--green-2)' }}>{answer}</b>.<br />
+            {solo ? 'nice solve.' : 'you both got happiness, food, xp and coins.'}
+          </div>
           <button className="btn btn-green mt-16" onClick={startRound}>new word</button>
         </div>
       )}

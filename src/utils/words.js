@@ -1,6 +1,8 @@
 // a large list of common 5-letter words used both as answers and for
 // validating guesses. kept lowercase to match the site's style.
 
+import { VALID_GUESSES } from './validGuesses'
+
 export const WORDS = [
   'about','above','abuse','actor','acute','admit','adopt','adult','after','again',
   'agent','agree','ahead','alarm','album','alert','alike','alive','allow','alone',
@@ -97,11 +99,14 @@ export const WORDS = [
   'wrote','yacht','yeast','yield','young','yours','youth','zebra','zesty','zonal',
 ]
 
-// build a fast lookup set for guess validation.
+// build a fast lookup set for guess validation. a guess counts as valid if it's
+// one of our curated answers OR appears in the full standard wordle dictionary
+// (so real words like "fairs" are accepted even though they're not answers).
 const WORD_SET = new Set(WORDS)
 
 export function isValidWord(word) {
-  return WORD_SET.has(word.toLowerCase())
+  const w = String(word || '').toLowerCase()
+  return WORD_SET.has(w) || VALID_GUESSES.has(w)
 }
 
 export function randomWord() {

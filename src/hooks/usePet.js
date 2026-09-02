@@ -86,7 +86,6 @@ export function usePet(identity) {
 
   // apply an arbitrary bundle of stat changes and handle leveling up.
   // returns info about whether a level up happened (for animations).
-  const applyRewardRef = useRef(null)
   const applyReward = useCallback((reward = {}) => {
     let leveledUp = false
     let newLevel = 1
@@ -122,7 +121,6 @@ export function usePet(identity) {
 
     return { leveledUp, newLevel, coinBonus }
   }, [setPet])
-  applyRewardRef.current = applyReward
 
   const recordGame = useCallback((game, score) => {
     setPet((prev) => {

@@ -31,9 +31,7 @@ html, body, #root {
 
 body {
   font-family: var(--body);
-  background:
-    radial-gradient(circle at 50% -10%, #2a0d5c 0%, transparent 55%),
-    linear-gradient(160deg, var(--bg-1), var(--bg-0) 60%, #060118 100%);
+  background: var(--bg-1);
   color: var(--ink);
   overflow: hidden;
   -webkit-font-smoothing: none;
@@ -74,7 +72,7 @@ button {
   inset: 0;
   pointer-events: none;
   z-index: 9998;
-  background: radial-gradient(circle at 50% 50%, transparent 60%, rgba(0,0,0,0.55) 100%);
+  background: none;
 }
 
 /* ===== app frame ===== */
@@ -85,13 +83,15 @@ button {
   max-width: 720px;
   margin: 0 auto;
   position: relative;
+  padding: 0 18px 0;
+  box-sizing: border-box;
 }
 
 .screen {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 14px 16px 96px;
+  padding: 14px 16px 16px;
   scrollbar-width: thin;
   scrollbar-color: var(--purple) transparent;
 }
@@ -99,11 +99,12 @@ button {
 .screen::-webkit-scrollbar { width: 8px; }
 .screen::-webkit-scrollbar-thumb { background: var(--purple); border-radius: 0; }
 
-/* ===== game view: wider, with a docked chat panel beside the game ===== */
-.app-game, .app-wide { max-width: 1120px; }
+/* ===== game view: full-width main stretched left, chat docked right ===== */
+.app-game { max-width: none; padding: 0 28px 0; }
+.app-wide { max-width: 1120px; }
 
 /* the dedicated chat tab: a full-height docked chat panel */
-.screen-chat { display: flex; padding: 14px 16px 96px; }
+.screen-chat { display: flex; flex: 1; min-height: 0; padding: 6px 8px 8px; }
 .screen-chat .chat-panel.docked {
   position: static; right: auto; bottom: auto;
   width: 100%; height: 100%; max-width: 640px; margin: 0 auto; z-index: auto;
@@ -113,21 +114,32 @@ button {
 .game-layout {
   flex: 1; min-height: 0;
   display: flex; gap: 14px;
-  padding: 14px 16px 16px;
+  padding: 12px 8px 16px;
 }
 .game-main {
   flex: 1 1 auto; min-width: 0;
   overflow-y: auto; overflow-x: hidden;
-  display: flex; flex-direction: column; align-items: center;
+  display: flex; flex-direction: column; align-items: stretch;
   scrollbar-width: thin; scrollbar-color: var(--purple) transparent;
 }
 .game-main > * { width: 100%; }
+.game-main > .game-wrap { flex: 1; min-height: 0; }
+.page-layout { padding: 22px 8px 10px; gap: 22px; }
+.page-main > * { max-width: 1080px; margin-left: auto; margin-right: auto; }
 .game-side {
-  flex: 0 0 340px; min-height: 0; display: flex;
+  flex: 0 0 360px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
 }
 .game-side .chat-panel.docked {
   position: static; right: auto; bottom: auto;
-  width: 100%; height: 100%; z-index: auto;
+  width: 100%;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  z-index: auto;
   box-shadow: inset 0 0 0 2px var(--pink), 5px 5px 0 rgba(0,0,0,0.4);
   animation: none;
 }
@@ -136,7 +148,9 @@ button {
   .app-game { max-width: 720px; }
   .game-layout { flex-direction: column; overflow-y: auto; gap: 12px; }
   .game-main { overflow: visible; flex: 0 0 auto; }
-  .game-side { flex: 0 0 auto; height: 320px; }
+  .game-side { flex: 0 0 auto; height: min(56vh, 560px); min-height: 420px; }
+  .page-layout { padding: 8px 6px 8px; gap: 12px; }
+  .app, .app-game { padding: 0 12px 0; }
 }
 
 .screen-enter {
@@ -439,13 +453,14 @@ button {
 
 /* ===== navigation ===== */
 .nav {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
+  position: relative;
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  background: var(--panel);
-  border-top: 4px solid #000;
-  box-shadow: inset 0 3px 0 var(--purple);
+  background: transparent;
+  border: none;
+  border-top: 2px solid rgba(160,107,255,0.28);
+  box-shadow: none;
   z-index: 100;
 }
 
@@ -479,10 +494,13 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px 10px;
-  border-bottom: 3px solid #000;
-  box-shadow: inset 0 -3px 0 rgba(160,107,255,0.4);
+  padding: 16px 8px;
+  border: none;
+  border-bottom: 2px solid rgba(160,107,255,0.28);
+  box-shadow: none;
   gap: 10px;
+  flex-shrink: 0;
+  background: transparent;
 }
 
 .header .brand {
@@ -785,7 +803,7 @@ button {
 
 /* ===== responsive ===== */
 @media (max-width: 480px) {
-  .header { padding: 10px 12px 8px; }
+  .header { padding: 14px 4px; }
   .header .brand { font-size: 9px; }
   .header .brand small { font-size: 6px; }
   .header-right { gap: 5px; }
@@ -796,7 +814,7 @@ button {
   .greeting { font-size: 12px; line-height: 1.7; }
   .submessage { font-size: 17px; }
 
-  .screen { padding: 12px 12px 92px; }
+  .screen { padding: 12px 12px 12px; }
 
   .btn { font-size: 10px; padding: 12px 6px; }
   .btn-row { gap: 8px; }
@@ -936,7 +954,13 @@ input, button { touch-action: manipulation; }
 .icon-badge.bell { color: var(--cyan); animation: pulseDim 1.4s ease-in-out infinite; }
 
 /* ---- together scene (home) ---- */
-.together-window { max-width: 100%; aspect-ratio: 16 / 10; }
+.together-window {
+  width: min(100%, 640px);
+  max-width: 640px;
+  max-height: 280px;
+  aspect-ratio: 2 / 1;
+  margin: 0 auto;
+}
 .grass-floor {
   height: 30% !important;
   background: repeating-linear-gradient(90deg, #2f6b3a, #2f6b3a 12px, #387d44 12px, #387d44 24px) !important;
@@ -947,10 +971,10 @@ input, button { touch-action: manipulation; }
   justify-content: space-around; padding: 0 6% 8%;
 }
 .together-pet { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; z-index: 2; }
-.together-pet .pet-svg { width: 96px; height: 96px; }
+.together-pet .pet-svg { width: 88px; height: 88px; }
 .together-name { font-family: var(--pixel); font-size: 8px; color: var(--pink-soft); }
 .together-star { align-self: center; font-size: 22px; color: var(--yellow); text-shadow: 0 0 10px rgba(255,216,75,0.7); animation: bob 2s ease-in-out infinite; }
-.pet-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 96px; height: 96px; justify-content: center; }
+.pet-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 88px; height: 88px; justify-content: center; }
 .pet-empty-egg { font-size: 40px; animation: bob 2.6s ease-in-out infinite; }
 .cloud { position: absolute; font-size: 22px; opacity: 0.9; animation: drift 22s linear infinite; }
 .cloud-1 { top: 10%; left: -10%; animation-duration: 26s; }
@@ -1112,8 +1136,8 @@ input, button { touch-action: manipulation; }
   color: #05201f; padding: 0 4px;
 }
 .chat-panel {
-  position: absolute; right: 16px; bottom: 148px; z-index: 450;
-  width: min(92vw, 360px); height: min(62vh, 460px);
+  position: absolute; right: 14px; top: 72px; bottom: 148px; z-index: 450;
+  width: min(92vw, 340px);
   display: flex; flex-direction: column;
   background: var(--panel); border: 3px solid #000;
   box-shadow: inset 0 0 0 2px var(--pink), 8px 8px 0 rgba(0,0,0,0.5);
@@ -1146,16 +1170,68 @@ input, button { touch-action: manipulation; }
 .chat-input {
   flex: 1; font-family: var(--body); font-size: 15px; padding: 10px;
   background: #07021a; border: 2px solid #000; box-shadow: inset 0 0 0 2px var(--cyan);
-  color: var(--ink); outline: none; text-transform: lowercase; min-width: 0;
+  color: var(--ink); outline: none; min-width: 0;
 }
 .chat-input:focus { box-shadow: inset 0 0 0 2px var(--pink); }
 .chat-input-row .btn { font-size: 9px; padding: 10px 12px; }
+
+/* time + read receipt under a message */
+.chat-receipt {
+  font-family: var(--pixel); font-size: 6px; letter-spacing: 0.5px;
+  color: var(--ink-dim); padding: 0 4px;
+}
+.chat-receipt.seen { color: var(--cyan); }
+.chat-receipt.delivered { color: var(--green); }
+
+/* "partner is typing" bubble */
+.chat-bubble.typing { display: inline-flex; gap: 5px; align-items: center; padding: 12px 12px; }
+.typing-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--pink-soft);
+  animation: typingBounce 1.1s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.typing-dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.55; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* emoji picker */
+.emoji-toggle {
+  flex: 0 0 auto; width: 42px; font-size: 18px; line-height: 1;
+  background: #07021a; border: 2px solid #000; box-shadow: inset 0 0 0 2px var(--cyan);
+  color: var(--ink); cursor: pointer;
+}
+.emoji-toggle.on { box-shadow: inset 0 0 0 2px var(--pink); }
+.emoji-toggle:active { transform: translate(1px,1px); }
+/* emoji picker as a popover that stems from the emoji button */
+.emoji-wrap { position: relative; flex: 0 0 auto; display: flex; }
+.emoji-pop {
+  position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 20;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+  padding: 8px; width: 236px;
+  background: var(--panel); border: 3px solid #000;
+  box-shadow: inset 0 0 0 2px var(--pink), 5px 5px 0 rgba(0,0,0,0.5);
+  animation: notifIn 0.16s steps(3);
+}
+.emoji-pop::after {
+  content: ''; position: absolute; left: 14px; bottom: -8px;
+  width: 12px; height: 12px; background: var(--panel);
+  border-right: 3px solid #000; border-bottom: 3px solid #000;
+  transform: rotate(45deg);
+}
+.emoji-btn {
+  font-size: 20px; line-height: 1; padding: 5px 0; background: var(--panel-2);
+  border: 2px solid #000; box-shadow: 2px 2px 0 rgba(0,0,0,0.3); cursor: pointer;
+}
+.emoji-btn:active { transform: translate(1px,1px); }
 
 /* ---- small screens ---- */
 @media (max-width: 480px) {
   .nav-5 .nav-btn, .nav-6 .nav-btn { font-size: 6px; padding: 10px 2px; }
   .nav-5 .nav-btn .nav-ico, .nav-6 .nav-btn .nav-ico { font-size: 15px; }
-  .together-pet .pet-svg { width: 74px; height: 74px; }
+  .together-pet .pet-svg { width: 72px; height: 72px; }
+  .together-window { max-width: 100%; max-height: 210px; }
   .gift-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
   .gift-emoji { font-size: 22px; }
   .park { height: min(52vh, 400px); }

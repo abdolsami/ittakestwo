@@ -38,6 +38,26 @@ export function sendChat(rt, text) {
   rt.push('chat', { from: rt.identity, text: clean, ts: Date.now() })
 }
 
+// ---- chat presence: live typing + read receipts ----
+// each person keeps a small record at chatMeta/<id>:
+//   typing    – timestamp of the last keystroke (0 when not typing)
+//   delivered – ts of the newest message this person has received
+//   seen      – ts of the newest message this person has actually looked at
+export function setChatTyping(rt, isTyping) {
+  if (!rt) return
+  rt.set(`chatMeta/${rt.identity}/typing`, isTyping ? Date.now() : 0)
+}
+
+export function setChatDelivered(rt, ts) {
+  if (!rt || !ts) return
+  rt.set(`chatMeta/${rt.identity}/delivered`, ts)
+}
+
+export function setChatSeen(rt, ts) {
+  if (!rt || !ts) return
+  rt.set(`chatMeta/${rt.identity}/seen`, ts)
+}
+
 // bump the shared friendship score. only the initiator calls this so it isn't
 // double-counted; both screens see the new value because it's shared.
 export function addFriendship(rt, kind) {
@@ -45,9 +65,18 @@ export function addFriendship(rt, kind) {
   if (rt && pts) rt.increment('friendship', pts)
 }
 
-// ---- live head-to-head play ----
-// publish my live state for a game so my partner sees our scores race in
-// realtime. shape: { score, status: 'playing' | 'done', name, ts }
+// I'm sitting in this game right now (idle, playing, or between rounds).
+// used so the other person can be asked before joining.
+export function setPlaying(rt, game, state) {
+  if (!rt || !game) return
+  rt.set(`games/${game}/playing/${rt.identity}`, { ...state, ts: Date.now() })
+}
+
+export function clearPlaying(rt, game) {
+  if (!rt || !game) return
+  rt.remove(`games/${game}/playing/${rt.identity}`)
+}
+
 export function setGameLive(rt, game, state) {
   if (!rt || !game) return
   rt.set(`games/${game}/live/${rt.identity}`, { ...state, ts: Date.now() })
@@ -72,6 +101,45 @@ export function setFlappyBird(rt, bird) {
 export function clearFlappyBird(rt) {
   if (!rt) return
   rt.remove(`games/flappy/birds/${rt.identity}`)
+}
+
+// ---- shared 2-player snake (same arena; any touch kills both) ----
+export function setSnakeSession(rt, session) {
+  if (!rt) return
+  rt.set('games/snake/session', { ...session, ts: Date.now() })
+}
+
+// publish my live snake so my partner can see it and check collisions.
+// shape: { body: [{x,y}...], food: {x,y}, dir, score, alive, round, ts }
+export function setSnakePlayer(rt, state) {
+  if (!rt) return
+  rt.set(`games/snake/players/${rt.identity}`, { ...state, ts: Date.now() })
+}
+
+export function clearSnakePlayer(rt) {
+  if (!rt) return
+  rt.remove(`games/snake/players/${rt.identity}`)
+}
+
+// ---- shared 2-player tetris (one well, one falling block each) ----
+export function setTetrisSession(rt, session) {
+  if (!rt) return
+  rt.set('games/tetris/session', { ...session, ts: Date.now() })
+}
+
+export function setTetrisPlayer(rt, state) {
+  if (!rt) return
+  rt.set(`games/tetris/players/${rt.identity}`, { ...state, ts: Date.now() })
+}
+
+export function clearTetrisPlayer(rt) {
+  if (!rt) return
+  rt.remove(`games/tetris/players/${rt.identity}`)
+}
+
+export function setTetrisBoard(rt, board) {
+  if (!rt) return
+  rt.set('games/tetris/board', { ...board, ts: Date.now() })
 }
 
 // ---- shared co-op wordle (both people solve ONE board together) ----

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePet } from './hooks/usePet'
 import { useNotify } from './components/Notification'
-import { useRealtime, useWatch, usePartnerOnline, useConnectionStatus } from './realtime/RealtimeContext'
+import { useRealtime, useWatch, usePartnerOnline } from './realtime/RealtimeContext'
 import { publishPet, emitEvent, addFriendship } from './realtime/world'
 import { useNewEvents, useWorldMaintenance } from './hooks/useWorldEvents'
 import { desktopNotify, useNotifyPermission } from './hooks/useDesktopNotify'
 import { giftById, SPECIAL_MOMENTS } from './utils/social'
-import { feeling } from './utils/petText'
 import Header from './components/Header'
 import Navigation from './components/Navigation'
 import Home from './components/Home'
@@ -17,7 +16,6 @@ import AnimalPicker from './components/AnimalPicker'
 import PetPage from './components/PetPage'
 import PetPark from './components/PetPark'
 import FloatingChat from './components/FloatingChat'
-import VersusHud from './components/VersusHud'
 import Wordle from './games/Wordle'
 import Tetris from './games/Tetris'
 import Snake from './games/Snake'
@@ -52,15 +50,12 @@ export default function World({ identity, onLogout }) {
   } = usePet(identity)
 
   const partnerOnline = usePartnerOnline()
-  const connected = useConnectionStatus()
   const notifyPerm = useNotifyPermission()
   const partnerPet = useWatch(`pets/${partner}`)
   const friendship = useWatch('friendship', 0)
 
   const [tab, setTab] = useState('home')
   const [activeGame, setActiveGame] = useState(null)
-  const [liveScore, setLiveScore] = useState(0)
-  const [liveStatus, setLiveStatus] = useState('playing')
   const [coinPop, setCoinPop] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   const [feeding, setFeeding] = useState(false)
@@ -118,17 +113,8 @@ export default function World({ identity, onLogout }) {
     return res
   }, [applyReward, triggerCoinPop, notify])
 
-  // start a game fresh — reset the live head-to-head state.
   const startGame = useCallback((game) => {
-    setLiveScore(0)
-    setLiveStatus('playing')
     setActiveGame(game)
-  }, [])
-
-  // games report their live score as they play so the partner sees the race.
-  const handleLiveScore = useCallback((s) => {
-    setLiveScore(s)
-    setLiveStatus('playing')
   }, [])
 
   const onGameFinish = useCallback((game) => (reward, score, isHigh) => {
@@ -138,10 +124,6 @@ export default function World({ identity, onLogout }) {
     if (isHigh && score > 0) {
       setTimeout(() => notify('new high score!', '🏆'), 400)
     }
-    // wordle is an endless solving session; the others have a real game over.
-    setLiveScore(score)
-    if (game !== 'wordle') setLiveStatus('done')
-    // let the partner's pet celebrate too.
     emitEvent(rt, { type: 'celebrate', game, score })
     addFriendship(rt, 'game')
   }, [recordGame, handleReward, notify, rt])
@@ -241,23 +223,20 @@ export default function World({ identity, onLogout }) {
         <Header
           identity={identity} partner={partner} partnerOnline={partnerOnline}
           coins={pet.coins} coinPop={coinPop} onLogout={onLogout}
-          connected={connected} mode={rt.mode} onNudge={handleNudge}
+          onNudge={handleNudge}
           notifPermission={notifyPerm.permission} notifSupported={notifyPerm.supported}
           onEnableNotify={notifyPerm.request}
         />
         <div className="game-layout">
           <main className="game-main">
-            {activeGame !== 'flappy' && activeGame !== 'wordle' && (
-              <VersusHud game={activeGame} myScore={liveScore} myStatus={liveStatus} />
-            )}
             {activeGame === 'wordle' && (
               <Wordle onExit={exit} onFinish={onGameFinish('wordle')} highScore={pet.highScores?.wordle || 0} />
             )}
             {activeGame === 'tetris' && (
-              <Tetris onExit={exit} onFinish={onGameFinish('tetris')} onScore={handleLiveScore} highScore={pet.highScores?.tetris || 0} />
+              <Tetris onExit={exit} onFinish={onGameFinish('tetris')} highScore={pet.highScores?.tetris || 0} />
             )}
             {activeGame === 'snake' && (
-              <Snake onExit={exit} onFinish={onGameFinish('snake')} onScore={handleLiveScore} highScore={pet.highScores?.snake || 0} />
+              <Snake onExit={exit} onFinish={onGameFinish('snake')} highScore={pet.highScores?.snake || 0} />
             )}
             {activeGame === 'flappy' && (
               <FlappyBird onExit={exit} onFinish={onGameFinish('flappy')} highScore={pet.highScores?.flappy || 0} mySpecies={pet.species} />
@@ -268,61 +247,73 @@ export default function World({ identity, onLogout }) {
           </aside>
         </div>
         {levelUp && <LevelUpBurst level={levelUp.level} />}
+        <Navigation
+          active={tab === 'feed' ? 'pet' : tab}
+          onChange={(t) => { setActiveGame(null); setTab(t) }}
+        />
+        <WorldMaintenance />
       </div>
     )
   }
 
-  // the games menu and the chat tab both use the wider layout.
-  const wide = tab === 'games' || tab === 'chat'
-
+  // ---- every tab: full-width main stretched left, chat docked on the right ----
+  // (the dedicated chat tab shows the chat panel on its own, full width.)
   return (
-    <div className={`app ${wide ? 'app-wide' : ''}`}>
+    <div className="app app-game">
       <Header
         identity={identity} partner={partner} partnerOnline={partnerOnline}
         coins={pet.coins} coinPop={coinPop} onLogout={onLogout}
-        connected={connected} mode={rt.mode} onNudge={handleNudge}
+        onNudge={handleNudge}
         notifPermission={notifyPerm.permission} notifSupported={notifyPerm.supported}
         onEnableNotify={notifyPerm.request}
       />
 
-      <div className={`screen ${tab === 'chat' ? 'screen-chat' : ''}`} key={tab}>
-        {tab === 'home' && (
-          <Home
-            pet={pet} mood={mood} coinPop={coinPop} feeding={feeding} petting={petting}
-            partnerPet={partnerPet} partnerOnline={partnerOnline} friendship={friendship}
-            identity={identity} partner={partner}
-            onPlay={() => setTab('games')}
-            onFeed={() => setTab('feed')}
-            onPet={handlePet}
-            onVisitPark={() => setTab('park')}
-          />
-        )}
-        {tab === 'games' && <ArcadeMenu pet={pet} identity={identity} partner={partner} partnerOnline={partnerOnline} onSelect={startGame} />}
-        {tab === 'feed' && <FeedMenu pet={pet} onFeed={handleFeed} />}
-        {tab === 'park' && (
-          <PetPark
-            identity={identity} partner={partner}
-            myPet={{ species: pet.species, name: pet.name, mood }}
-            partnerPet={partnerPet} friendship={friendship}
-            partnerOnline={partnerOnline} notify={notify}
-          />
-        )}
-        {tab === 'pet' && (
-          <PetPage
-            identity={identity} pet={pet} mood={mood} feeding={feeding} petting={petting}
-            partner={partner} partnerPet={partnerPet} partnerOnline={partnerOnline} friendship={friendship}
-            onFeed={() => setTab('feed')}
-            onPet={handlePet}
-            onRename={setName}
-            onWave={handleWave}
-            onGift={handleGift}
-          />
-        )}
-        {tab === 'stats' && <StatsScreen pet={pet} days={days} identity={identity} onReset={handleReset} />}
-        {tab === 'chat' && (
+      {tab === 'chat' ? (
+        <div className="screen screen-chat" key="chat">
           <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} docked />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="game-layout page-layout" key={tab}>
+          <main className="game-main page-main">
+            {tab === 'home' && (
+              <Home
+                pet={pet} mood={mood} coinPop={coinPop} feeding={feeding} petting={petting}
+                partnerPet={partnerPet} partnerOnline={partnerOnline} friendship={friendship}
+                identity={identity} partner={partner}
+                onPlay={() => setTab('games')}
+                onFeed={() => setTab('feed')}
+                onPet={handlePet}
+                onVisitPark={() => setTab('park')}
+              />
+            )}
+            {tab === 'games' && <ArcadeMenu pet={pet} identity={identity} partner={partner} partnerOnline={partnerOnline} onSelect={startGame} />}
+            {tab === 'feed' && <FeedMenu pet={pet} onFeed={handleFeed} />}
+            {tab === 'park' && (
+              <PetPark
+                identity={identity} partner={partner}
+                myPet={{ species: pet.species, name: pet.name, mood }}
+                partnerPet={partnerPet} friendship={friendship}
+                partnerOnline={partnerOnline} notify={notify}
+              />
+            )}
+            {tab === 'pet' && (
+              <PetPage
+                identity={identity} pet={pet} mood={mood} feeding={feeding} petting={petting}
+                partner={partner} partnerPet={partnerPet} partnerOnline={partnerOnline} friendship={friendship}
+                onFeed={() => setTab('feed')}
+                onPet={handlePet}
+                onRename={setName}
+                onWave={handleWave}
+                onGift={handleGift}
+              />
+            )}
+            {tab === 'stats' && <StatsScreen pet={pet} days={days} identity={identity} onReset={handleReset} />}
+          </main>
+          <aside className="game-side menu">
+            <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} docked />
+          </aside>
+        </div>
+      )}
 
       <Navigation
         active={tab === 'feed' ? 'pet' : tab}
@@ -330,10 +321,6 @@ export default function World({ identity, onLogout }) {
       />
 
       {levelUp && <LevelUpBurst level={levelUp.level} />}
-      {/* floating chat bubble on every page except the dedicated chat tab. */}
-      {tab !== 'chat' && (
-        <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} />
-      )}
       <WorldMaintenance />
     </div>
   )

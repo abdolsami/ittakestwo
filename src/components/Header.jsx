@@ -1,9 +1,7 @@
 export default function Header({
   identity, partner, partnerOnline, coins, coinPop, onLogout,
-  connected, mode, onNudge, notifPermission, notifSupported, onEnableNotify,
+  onNudge, notifPermission, notifSupported, onEnableNotify,
 }) {
-  const cloud = mode === 'firebase'
-  const live = cloud ? (connected ? 'live' : 'connecting') : 'preview'
   const showBell = notifSupported && notifPermission !== 'granted' && notifPermission !== 'unsupported'
 
   return (
@@ -14,16 +12,6 @@ export default function Header({
       </div>
 
       <div className="header-right">
-        <span
-          className={`hpill status ${live}`}
-          title={cloud
-            ? (connected ? 'connected to your cloud world' : 'connecting to cloud…')
-            : 'preview mode — syncing between tabs on this device'}
-        >
-          <span className="hdot" aria-hidden />
-          {cloud ? (connected ? 'live' : '…') : 'preview'}
-        </span>
-
         <span
           className={`hpill presence ${partnerOnline ? 'on' : ''}`}
           title={`${partner} is ${partnerOnline ? 'online' : 'away'}`}
