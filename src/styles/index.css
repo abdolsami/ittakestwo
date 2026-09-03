@@ -1208,8 +1208,8 @@ input, button { touch-action: manipulation; }
 .emoji-wrap { position: relative; flex: 0 0 auto; display: flex; }
 .emoji-pop {
   position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
-  padding: 8px; width: 236px;
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;
+  padding: 8px; width: 308px;
   background: var(--panel); border: 3px solid #000;
   box-shadow: inset 0 0 0 2px var(--pink), 5px 5px 0 rgba(0,0,0,0.5);
   animation: notifIn 0.16s steps(3);

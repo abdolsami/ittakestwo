@@ -8,9 +8,10 @@ import { desktopNotify } from '../hooks/useDesktopNotify'
 
 const QUICK = ['hi!', 'come to the park!', 'play a game?', 'good night!', 'mehreen!', 'ali!']
 const EMOJIS = [
-  '😊', '😂', '🥰', '😍', '😘', '😎', '🤪', '😭',
-  '👀', '👍', '🙌', '👋', '💪', '✨', '⭐', '🔥',
-  '🎮', '🕹️', '🎉', '🍕', '☕', '🌙', '💬', '❗',
+  '🙄', '😚', '🥺', '😓', '🤞', '🙂', '🤬', '✌️',
+  '😮', '😍', '💔', '😭', '😣', '😌', '👅', '🤔',
+  '☹️', '😒', '⚡', '🥰', '😘', '💯', '❤️‍🩹', '🫡',
+  '💋', '😢', '🧐', '😪', '🤷‍♂️', '🍟', '👀', '👨',
 ]
 
 // how long a keystroke keeps the "typing…" bubble alive on the other screen.
