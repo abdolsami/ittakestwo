@@ -5,6 +5,7 @@ import { FriendshipBar } from './Friendship'
 import { getTimeGreeting } from '../utils/timeGreeting'
 import { moodFromSnapshot } from '../utils/petText'
 import { friendshipLevel } from '../utils/social'
+import { lookFrom } from '../utils/appearance'
 
 export default function Home({
   pet, mood, coinPop, feeding, petting,
@@ -23,6 +24,8 @@ export default function Home({
   const level = friendshipLevel(friendship)
   const partnerMood = moodFromSnapshot(partnerPet)
   const bothHere = Boolean(partnerPet?.species)
+  const myLook = lookFrom(pet)
+  const theirLook = lookFrom(partnerPet)
 
   return (
     <div className="screen-enter stack">
@@ -39,7 +42,7 @@ export default function Home({
         <div className="together-stage">
           <div className="together-pet">
             <span className="together-name">{pet.name || identity}</span>
-            <Pet mood={mood} species={pet.species} facing="right" />
+            <Pet mood={mood} species={myLook.species} color={myLook.color} accessory={myLook.accessory} facing="right" />
           </div>
 
           <div className="together-star" aria-hidden>
@@ -51,7 +54,7 @@ export default function Home({
               {bothHere ? (partnerPet.name || partner) : `${partner}'s pet`}
             </span>
             {bothHere ? (
-              <Pet mood={partnerMood} species={partnerPet.species} facing="left" />
+              <Pet mood={partnerMood} species={theirLook.species} color={theirLook.color} accessory={theirLook.accessory} facing="left" />
             ) : (
               <div className="pet-empty">
                 <span className="pet-empty-egg" aria-hidden>🥚</span>

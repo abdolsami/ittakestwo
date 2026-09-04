@@ -11,6 +11,7 @@ export default function StatsScreen({ pet, days, onReset, identity = 'you' }) {
     { k: 'tetris best', v: pet.highScores?.tetris || 0 },
     { k: 'snake best', v: pet.highScores?.snake || 0 },
     { k: 'flappy best', v: pet.highScores?.flappy || 0 },
+    { k: 'pac-man best', v: pet.highScores?.pacman || 0 },
   ]
 
   return (

@@ -10,6 +10,8 @@ export function publishPet(rt, pet, mood) {
   rt.set(`pets/${rt.identity}`, {
     name: pet.name || rt.identity,
     species: pet.species || null,
+    color: pet.color || null,
+    accessory: pet.accessory || 'none',
     mood,
     level: pet.level,
     hunger: Math.round(pet.hunger),
@@ -158,6 +160,26 @@ export function setWordleCurrent(rt, text, round) {
 export function pushWordleGuess(rt, word, round) {
   if (!rt) return
   rt.push('games/wordle/guesses', { word, by: rt.identity, round, ts: Date.now() })
+}
+
+export function setPacmanSession(rt, session) {
+  if (!rt) return
+  rt.set('games/pacman/session', { ...session, ts: Date.now() })
+}
+
+export function setPacmanPlayer(rt, state) {
+  if (!rt) return
+  rt.set(`games/pacman/players/${rt.identity}`, { ...state, ts: Date.now() })
+}
+
+export function clearPacmanPlayer(rt) {
+  if (!rt) return
+  rt.remove(`games/pacman/players/${rt.identity}`)
+}
+
+export function setPacmanWorld(rt, world) {
+  if (!rt) return
+  rt.set('games/pacman/world', { ...world, ts: Date.now() })
 }
 
 export function clearWordleGuesses(rt) {

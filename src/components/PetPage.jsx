@@ -1,17 +1,22 @@
 import { useState } from 'react'
 import Pet from './Pet'
 import GiftMenu from './GiftMenu'
+import { AccessoryBoard, ColorBoard } from './LookStudio'
 import { FriendshipStars } from './Friendship'
 import { feeling, moodFromSnapshot } from '../utils/petText'
+import { accessoryLabel, lookFrom, looksFor } from '../utils/appearance'
 
 export default function PetPage({
   identity, pet, mood, feeding, petting,
   partner, partnerPet, partnerOnline, friendship,
-  onFeed, onPet, onRename, onWave, onGift,
+  onFeed, onPet, onRename, onLook, onWave, onGift,
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(pet.name || '')
   const [giftOpen, setGiftOpen] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
+  const look = lookFrom(pet)
+  const partnerLook = lookFrom(partnerPet)
 
   const partnerMood = moodFromSnapshot(partnerPet)
   const hasPartner = Boolean(partnerPet?.species)
@@ -34,7 +39,7 @@ export default function PetPage({
       <div className="pet-window">
         <div className="floor" />
         <div className="pet-stage">
-          <Pet mood={mood} species={pet.species} feeding={feeding} petting={petting} />
+          <Pet mood={mood} species={look.species} color={look.color} accessory={look.accessory} feeding={feeding} petting={petting} />
         </div>
       </div>
 
@@ -66,7 +71,36 @@ export default function PetPage({
         <p className="hint center">
           your pet is called {pet.name}.{' '}
           <button className="text-link" onClick={() => { setDraft(pet.name || ''); setEditing(true) }}>rename</button>
+          {' · '}
+          <button className="text-link" onClick={() => setCustomOpen((v) => !v)}>
+            {customOpen ? 'done styling' : 'change look'}
+          </button>
         </p>
+      )}
+
+      {customOpen && (
+        <div className="panel customize-panel">
+          <div className="section-head">
+            <span className="title-pixel">color</span>
+            <span className="line" />
+          </div>
+          <ColorBoard
+            value={look.color}
+            fallback={looksFor(pet.species).body}
+            onChange={(color) => onLook({ color })}
+          />
+          <div className="section-head" style={{ marginTop: 14 }}>
+            <span className="title-pixel">accessory</span>
+            <span className="line" />
+          </div>
+          <AccessoryBoard
+            value={look.accessory}
+            onChange={(accessory) => onLook({ accessory })}
+          />
+          <p className="tiny muted center" style={{ marginTop: 10 }}>
+            {look.accessory === 'none' ? 'no accessory' : `wearing a ${accessoryLabel(look.accessory)}`}
+          </p>
+        </div>
       )}
 
       {/* smaller focus: partner's pet */}
@@ -79,7 +113,7 @@ export default function PetPage({
       <div className="partner-card panel">
         <div className="partner-pet">
           {hasPartner ? (
-            <Pet mood={partnerMood} species={partnerPet.species} facing="left" />
+            <Pet mood={partnerMood} species={partnerLook.species} color={partnerLook.color} accessory={partnerLook.accessory} facing="left" />
           ) : (
             <div className="pet-empty">
               <span className="pet-empty-egg" aria-hidden>🥚</span>

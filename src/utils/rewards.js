@@ -91,6 +91,28 @@ export function flappyReward(score = 0) {
   }
 }
 
+// pac-man: reward scales with score and how deep you reached.
+export function pacmanReward(score = 0, level = 1) {
+  const coins = Math.round(score / 45) + level * 3
+  const xp = Math.round(score / 35) + level * 2
+  const happiness = Math.min(30, Math.round(score / 140) + level)
+  const hunger = Math.min(26, Math.round(score / 180) + level)
+
+  let message = 'nice run'
+  if (score >= 4000) message = 'ghosts never stood a chance'
+  else if (score >= 1800) message = 'great maze work'
+  else if (score < 200) message = 'your pet earned a reward'
+
+  return {
+    happiness: Math.max(3, happiness),
+    hunger: Math.max(2, hunger),
+    energy: 0,
+    xp: Math.max(4, xp),
+    coins: Math.max(4, coins),
+    message,
+  }
+}
+
 // food items for the shop.
 export const FOOD_ITEMS = [
   { id: 'apple', label: 'apple', emoji: '🍎', cost: 10, hunger: 15, happiness: 0 },

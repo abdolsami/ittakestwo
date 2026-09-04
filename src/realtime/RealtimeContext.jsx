@@ -73,6 +73,21 @@ export function useWatch(rel, defaultValue = null) {
   return value
 }
 
+// same as useWatch, but writes into a ref so high-frequency game
+// updates do not re-render react (the raf loop reads the ref).
+export function useWatchRef(rel, defaultValue = null) {
+  const rt = useRealtime()
+  const valueRef = useRef(defaultValue)
+  useEffect(() => {
+    if (!rt || rel == null) return undefined
+    return rt.watch(rel, (v) => {
+      valueRef.current = v == null ? defaultValue : v
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rt, rel])
+  return valueRef
+}
+
 // live connection status — for firebase this reflects a real handshake with the
 // database, so it's proof the api keys are working. local mode is always true.
 export function useConnectionStatus() {

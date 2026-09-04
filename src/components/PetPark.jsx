@@ -251,7 +251,7 @@ export default function PetPark({
           style={{ left: `${me.x}%`, top: `${me.y}%`, zIndex: Math.round(me.y) }}
         >
           <span className="park-name you">{myPet?.name || identity}</span>
-          <Pet mood={myMood} species={myPet?.species} facing={me.dir} />
+          <Pet mood={myMood} species={myPet?.species} color={myPet?.color} accessory={myPet?.accessory} facing={me.dir} />
         </div>
 
         {/* partner pet */}
@@ -261,7 +261,7 @@ export default function PetPark({
             style={{ left: `${partnerPos.x}%`, top: `${partnerPos.y}%`, zIndex: Math.round(partnerPos.y) }}
           >
             <span className="park-name">{partnerPet?.name || partner}{partnerOnline ? '' : ' 💤'}</span>
-            <Pet mood={partnerMood} species={partnerPet.species} facing={partnerPos.dir || 'left'} />
+            <Pet mood={partnerMood} species={partnerPet.species} color={partnerPet.color} accessory={partnerPet.accessory} facing={partnerPos.dir || 'left'} />
           </div>
         )}
 

@@ -13,6 +13,8 @@ function makeInitialPet() {
   return {
     name: 'mochi',
     species: null,
+    color: null,
+    accessory: 'none',
     hunger: 75,
     happiness: 70,
     energy: 80,
@@ -21,7 +23,7 @@ function makeInitialPet() {
     level: 1,
     coins: 30,
     gamesPlayed: 0,
-    highScores: { wordle: 0, tetris: 0, snake: 0, flappy: 0 },
+    highScores: { wordle: 0, tetris: 0, snake: 0, flappy: 0, pacman: 0 },
     startDate: now,
     lastVisit: now,
     lastFed: now,
@@ -75,12 +77,22 @@ export function usePet(identity) {
     setPet((prev) => ({ ...prev, name: clean }))
   }, [setPet])
 
-  // choose which animal the pet is. optionally set a starting name.
-  const setSpecies = useCallback((species, name) => {
+  // choose which animal the pet is. optionally set a starting name and look.
+  const setSpecies = useCallback((species, name, look = {}) => {
     setPet((prev) => ({
       ...prev,
       species,
       name: name ? name.trim().toLowerCase().slice(0, 14) : prev.name,
+      color: look.color != null ? look.color : (prev.color ?? null),
+      accessory: look.accessory != null ? look.accessory : (prev.accessory || 'none'),
+    }))
+  }, [setPet])
+
+  const setLook = useCallback((look = {}) => {
+    setPet((prev) => ({
+      ...prev,
+      color: look.color !== undefined ? look.color : prev.color,
+      accessory: look.accessory !== undefined ? look.accessory : (prev.accessory || 'none'),
     }))
   }, [setPet])
 
@@ -187,6 +199,7 @@ export function usePet(identity) {
     days,
     setName,
     setSpecies,
+    setLook,
     applyReward,
     recordGame,
     isNewHighScore,

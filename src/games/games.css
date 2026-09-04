@@ -134,7 +134,9 @@
   background: #07021a;
   box-shadow: inset 0 0 24px rgba(0,0,0,0.8), 0 0 18px rgba(75,224,224,0.2);
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
   touch-action: none;
+  contain: layout paint;
 }
 
 .tetris-layout {
@@ -223,6 +225,7 @@
 
   .snake-frame { width: min(90vw, 380px); }
   .snake-frame .canvas-stage { width: 100%; }
+  .pacman-stage { width: min(92vw, 380px); }
 }
 
 @media (max-width: 380px) {
@@ -298,5 +301,19 @@
   width: 100%;
   height: auto;
   aspect-ratio: 1;
+  max-height: 100%;
+}
+.pacman-stage {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, 56vh);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.pacman-stage .canvas-stage {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 19 / 22.8;
   max-height: 100%;
 }

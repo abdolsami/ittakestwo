@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { flappyReward } from '../utils/rewards'
-import { useRealtime, useWatch, usePartnerOnline } from '../realtime/RealtimeContext'
+import { useRealtime, useWatch, useWatchRef, usePartnerOnline } from '../realtime/RealtimeContext'
 import { usePlayTogether } from '../hooks/usePlayTogether'
+import { useGameLoop } from '../hooks/useGameLoop'
+import { shouldPublish } from '../utils/publish'
+import { get2d } from '../utils/canvas'
 import PlayInvite from '../components/PlayInvite'
 import { setFlappySession, setFlappyBird, clearFlappyBird } from '../realtime/world'
-import { getAnimal } from '../utils/animals'
+import { accessoryOf, drawAccessory, looksFor } from '../utils/appearance'
 import { isTypingInField } from '../utils/keys'
 import './games.css'
 
@@ -38,16 +41,17 @@ function gapCenter(seed, i) {
   return TOP_LIMIT + r * RANGE
 }
 
-export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
+export default function FlappyBird({ onExit, onFinish, highScore, mySpecies, myColor, myAccessory }) {
   const rt = useRealtime()
   const partner = rt.partner
   const partnerOnline = usePartnerOnline()
   const { ask, together, solo, playTogether, playSolo } = usePlayTogether('flappy')
   const session = useWatch('games/flappy/session')
-  const partnerBird = useWatch(`games/flappy/birds/${partner}`)
+  const partnerBirdRef = useWatchRef(`games/flappy/birds/${partner}`)
+  const partnerPet = useWatch(`pets/${partner}`)
 
   const canvasRef = useRef(null)
-  const rafRef = useRef(0)
+  const lastPayloadRef = useRef('')
   const birdRef = useRef({ y: HEIGHT * 0.42, vy: 0 })
   const frameRef = useRef(0)
   const startAtRef = useRef(null)
@@ -58,8 +62,6 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
   const finishedRef = useRef(false)
   const lastPubRef = useRef(0)
   const partnerYRef = useRef(HEIGHT * 0.42)
-  const partnerBirdRef = useRef(null)
-  partnerBirdRef.current = partnerBird
   const partnerOnlineRef = useRef(partnerOnline)
   partnerOnlineRef.current = partnerOnline
   const startRoundRef = useRef(() => {})
@@ -71,20 +73,26 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
   const [best, setBest] = useState(highScore || 0)
   const [reward, setReward] = useState(null)
 
-  const myColor = (getAnimal(mySpecies)?.body) || '#ffd84b'
-  const partnerColor = '#4be0e0'
+  const myLook = looksFor(mySpecies, myColor)
+  const theirLook = looksFor(partnerPet?.species, partnerPet?.color)
+  const myBody = myLook.body || '#ffd84b'
+  const partnerColor = theirLook.body || '#4be0e0'
+  const worn = accessoryOf(myAccessory)
+  const theirWorn = accessoryOf(partnerPet?.accessory)
 
   const publish = useCallback((force) => {
     if (!duoRef.current) return
     const now = Date.now()
-    if (!force && now - lastPubRef.current < 80) return
+    if (!force && now - lastPubRef.current < 45) return
     lastPubRef.current = now
-    setFlappyBird(rt, {
+    const payload = {
       y: Math.round(birdRef.current.y),
       alive: aliveRef.current,
       score: scoreRef.current,
       round: roundRef.current,
-    })
+    }
+    if (!force && !shouldPublish(lastPayloadRef, payload)) return
+    setFlappyBird(rt, payload)
   }, [rt])
 
   const finishRound = useCallback(() => {
@@ -94,6 +102,7 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
     const isHigh = s > (highScore || 0)
     setBest((b) => Math.max(b, s))
     const r = flappyReward(s)
+    setScore(s)
     setReward({ ...r, isHigh })
     setPhase('over')
     onFinish(r, s, isHigh)
@@ -144,18 +153,8 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
     if (!together) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
-    const partnerInRound = partnerBird && partnerBird.round === session.round
-    if (!partnerInRound && session.startAt && Date.now() > session.startAt + 8000) return
     beginRound(session.seed, session.startAt, session.round, true)
-  }, [together, session, beginRound, partnerBird])
-
-  // resolve the round once I'm dead and my partner is done (or not in this round).
-  useEffect(() => {
-    if (phase !== 'dead') return
-    const pb = partnerBird
-    const partnerDone = !pb || pb.round !== roundRef.current || pb.alive === false || !partnerOnline
-    if (partnerDone) finishRound()
-  }, [phase, partnerBird, partnerOnline, finishRound])
+  }, [together, session, beginRound])
 
   const flap = useCallback(() => {
     if (phase !== 'running' || !aliveRef.current) return
@@ -198,19 +197,15 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
 
     // score = pipes fully passed
     const passed = Math.max(0, Math.floor((d + BIRD_X - PIPE_W / 2 - FIRST_X) / SPACING) + 1)
-    if (passed > scoreRef.current) { scoreRef.current = passed; setScore(passed) }
+    if (passed > scoreRef.current) scoreRef.current = passed
   }, [die])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
+    const ctx = get2d(canvas)
 
-    // sky
-    const grad = ctx.createLinearGradient(0, 0, 0, HEIGHT)
-    grad.addColorStop(0, '#1a1140')
-    grad.addColorStop(1, '#2a1a52')
-    ctx.fillStyle = grad
+    ctx.fillStyle = skyGrad(ctx)
     ctx.fillRect(0, 0, WIDTH, HEIGHT)
 
     const running = startAtRef.current != null && Date.now() >= startAtRef.current
@@ -238,11 +233,11 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
     const pb = partnerBirdRef.current
     if (duoRef.current && pb && pb.round === roundRef.current && partnerOnlineRef.current) {
       partnerYRef.current += ((pb.y ?? partnerYRef.current) - partnerYRef.current) * 0.3
-      drawBird(ctx, BIRD_X - 20, partnerYRef.current, partnerColor, pb.alive === false, true)
+      drawBird(ctx, BIRD_X - 20, partnerYRef.current, partnerColor, pb.alive === false, true, theirWorn)
     }
 
     // my bird
-    drawBird(ctx, BIRD_X, birdRef.current.y, myColor, !aliveRef.current, false)
+    drawBird(ctx, BIRD_X, birdRef.current.y, myBody, !aliveRef.current, false, worn)
 
     // countdown
     if (startAtRef.current != null && Date.now() < startAtRef.current && phase === 'running') {
@@ -254,38 +249,48 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies }) {
       ctx.textAlign = 'center'
       ctx.fillText(String(Math.max(1, Math.min(3, remain))), WIDTH / 2, HEIGHT / 2 + 20)
     }
-  }, [phase, myColor])
+  }, [phase, myBody, partnerColor, worn, theirWorn])
 
-  // main loop
-  useEffect(() => {
-    const loop = () => {
-      const now = Date.now()
-      const startAt = startAtRef.current
-      if (phase === 'running' && aliveRef.current && startAt != null && now >= startAt) {
-        const targetFrame = Math.floor((now - startAt) / STEP_MS)
-        let guard = 0
-        while (frameRef.current < targetFrame && aliveRef.current && guard < 240) {
-          frameRef.current++
-          guard++
-          step()
-        }
-        publish(false)
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+
+  useGameLoop(() => {
+    const now = Date.now()
+    const startAt = startAtRef.current
+    if (phaseRef.current === 'running' && aliveRef.current && startAt != null && now >= startAt) {
+      const targetFrame = Math.floor((now - startAt) / STEP_MS)
+      let guard = 0
+      while (frameRef.current < targetFrame && aliveRef.current && guard < 8) {
+        frameRef.current++
+        guard++
+        step()
       }
-      if (pendingRestartRef.current) {
-        pendingRestartRef.current = false
-        startRoundRef.current()
-      }
-      draw()
-      rafRef.current = requestAnimationFrame(loop)
+      publish(false)
     }
-    rafRef.current = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [phase, step, draw, publish])
+    if (phaseRef.current === 'dead') {
+      const pb = partnerBirdRef.current
+      const partnerDone = !pb || pb.round !== roundRef.current || pb.alive === false || !partnerOnlineRef.current
+      if (partnerDone) finishRound()
+    }
+    if (pendingRestartRef.current) {
+      pendingRestartRef.current = false
+      startRoundRef.current()
+    }
+    draw()
+  })
 
   // cleanup my published bird when leaving
   useEffect(() => () => clearFlappyBird(rt), [rt])
 
-  const partnerScore = (partnerBird && partnerBird.round === roundRef.current) ? (partnerBird.score ?? 0) : null
+  const [partnerScore, setPartnerScore] = useState(null)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const pb = partnerBirdRef.current
+      setPartnerScore(pb && pb.round === roundRef.current ? (pb.score ?? 0) : null)
+      setScore(scoreRef.current)
+    }, 140)
+    return () => clearInterval(id)
+  }, [partnerBirdRef])
 
   return (
     <div className="game-wrap screen-enter">
@@ -384,7 +389,16 @@ function drawPipe(ctx, x, y, w, h, isTop) {
   ctx.fillRect(x - 3, lipY, w + 6, lipH)
 }
 
-function drawBird(ctx, x, y, color, dead, ghost) {
+let skyCache = null
+function skyGrad(ctx) {
+  if (skyCache) return skyCache
+  skyCache = ctx.createLinearGradient(0, 0, 0, HEIGHT)
+  skyCache.addColorStop(0, '#1a1140')
+  skyCache.addColorStop(1, '#2a1a52')
+  return skyCache
+}
+
+function drawBird(ctx, x, y, color, dead, ghost, accessory) {
   ctx.save()
   if (ghost) ctx.globalAlpha = 0.55
   // body
@@ -404,5 +418,7 @@ function drawBird(ctx, x, y, color, dead, ghost) {
   // beak
   ctx.fillStyle = '#ff9f43'
   ctx.fillRect(x + BIRD_R - 2, y - 1, 6, 5)
+  ctx.translate(x, y)
+  drawAccessory(ctx, accessory, BIRD_R)
   ctx.restore()
 }

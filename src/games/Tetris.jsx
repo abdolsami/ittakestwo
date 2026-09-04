@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { tetrisReward } from '../utils/rewards'
 import { isTypingInField } from '../utils/keys'
-import { useRealtime, useWatch, usePartnerOnline } from '../realtime/RealtimeContext'
+import { useRealtime, useWatch, useWatchRef, usePartnerOnline } from '../realtime/RealtimeContext'
 import { usePlayTogether } from '../hooks/usePlayTogether'
+import { useGameLoop } from '../hooks/useGameLoop'
+import { shouldPublish } from '../utils/publish'
+import { get2d, makeLayer } from '../utils/canvas'
 import PlayInvite from '../components/PlayInvite'
 import {
   setTetrisSession, setTetrisPlayer, clearTetrisPlayer, setTetrisBoard,
@@ -95,8 +98,8 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const partnerOnline = usePartnerOnline()
   const { ask, together, solo, playTogether, playSolo } = usePlayTogether('tetris')
   const session = useWatch('games/tetris/session')
-  const partnerLive = useWatch(`games/tetris/players/${partner}`)
-  const sharedBoard = useWatch('games/tetris/board')
+  const partnerRef = useWatchRef(`games/tetris/players/${partner}`)
+  const boardWatchRef = useWatchRef('games/tetris/board')
 
   const canvasRef = useRef(null)
   const nextCanvasRef = useRef(null)
@@ -106,7 +109,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const nextRef = useRef(randomPiece(rt.identity, false))
   const dropTimerRef = useRef(0)
   const lastTimeRef = useRef(0)
-  const rafRef = useRef(0)
+  const lastPayloadRef = useRef('')
   const runningRef = useRef(false)
   const finishedRef = useRef(false)
   const fastDropRef = useRef(null)
@@ -116,8 +119,6 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const seqRef = useRef(0)
   const lastPubRef = useRef(0)
   const duoRef = useRef(false)
-  const partnerRef = useRef(null)
-  partnerRef.current = partnerLive
   const partnerOnlineRef = useRef(partnerOnline)
   partnerOnlineRef.current = partnerOnline
 
@@ -161,23 +162,46 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     return cs.some(([cx, cy]) => blocked.some(([bx, by]) => bx === piece.x + cx + dx && by === piece.y + cy + dy))
   }, [partnerCells])
 
+  const pieceOverlapsBoard = useCallback((piece, board, cells = null) => {
+    const cs = cells || piece.cells
+    for (const [cx, cy] of cs) {
+      const nx = piece.x + cx
+      const ny = piece.y + cy
+      if (ny >= 0 && ny < ROWS && nx >= 0 && nx < COLS && board[ny][nx]) return true
+    }
+    return false
+  }, [])
+
+  // movement only cares about walls / floor / locked cells.
+  // the other person's falling piece is pass-through.
   const collides = useCallback((piece, board, dx = 0, dy = 0, cells = null) => (
-    hitsBoard(piece, board, dx, dy, cells) || hitsPartner(piece, dx, dy, cells)
-  ), [hitsBoard, hitsPartner])
+    hitsBoard(piece, board, dx, dy, cells)
+  ), [hitsBoard])
+
+  const startRoundRef = useRef(() => {})
+  const overlapRestartingRef = useRef(false)
+
+  const restartFromOverlap = useCallback(() => {
+    if (!duoRef.current || overlapRestartingRef.current) return
+    overlapRestartingRef.current = true
+    startRoundRef.current()
+  }, [])
 
   const publishMe = useCallback((force) => {
     if (!duoRef.current) return
     const now = Date.now()
-    if (!force && now - lastPubRef.current < 80) return
+    if (!force && now - lastPubRef.current < 40) return
     lastPubRef.current = now
-    setTetrisPlayer(rt, {
+    const payload = {
       piece: packPiece(pieceRef.current),
       next: packPiece(nextRef.current),
       score: scoreRef.current,
       lines: linesRef.current,
       alive: runningRef.current,
       round: roundRef.current,
-    })
+    }
+    if (!force && !shouldPublish(lastPayloadRef, payload)) return
+    setTetrisPlayer(rt, payload)
   }, [rt])
 
   const publishBoard = useCallback(() => {
@@ -196,6 +220,10 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const lockPiece = useCallback(() => {
     const piece = pieceRef.current
     if (!piece) return
+    if (duoRef.current && (hitsPartner(piece, 0, 0) || pieceOverlapsBoard(piece, boardRef.current))) {
+      restartFromOverlap()
+      return
+    }
     const board = boardRef.current
     for (const [cx, cy] of piece.cells) {
       const nx = piece.x + cx
@@ -236,7 +264,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
       setPhase('over')
     }
     publishMe(true)
-  }, [hitsBoard, publishBoard, publishMe, rt.identity])
+  }, [hitsBoard, hitsPartner, pieceOverlapsBoard, publishBoard, publishMe, restartFromOverlap, rt.identity])
 
   const endGame = useCallback(() => {
     if (finishedRef.current) return
@@ -244,6 +272,9 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     runningRef.current = false
     const isHigh = scoreRef.current > (highScore || 0)
     setBest(Math.max(highScore || 0, scoreRef.current))
+    setScore(scoreRef.current)
+    setLines(linesRef.current)
+    setLevel(levelRef.current)
     const r = tetrisReward(scoreRef.current, linesRef.current)
     setReward({ ...r, isHigh })
     onFinish(r, scoreRef.current, isHigh)
@@ -257,7 +288,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const drawNext = useCallback(() => {
     const canvas = nextCanvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
+    const ctx = get2d(canvas)
     ctx.fillStyle = '#07021a'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     const piece = nextRef.current
@@ -275,25 +306,11 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#07021a'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    ctx.strokeStyle = 'rgba(160,107,255,0.08)'
-    ctx.lineWidth = 1
-    for (let x = 0; x <= COLS; x++) {
-      ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, ROWS * CELL); ctx.stroke()
-    }
-    for (let y = 0; y <= ROWS; y++) {
-      ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(COLS * CELL, y * CELL); ctx.stroke()
-    }
+    const ctx = get2d(canvas)
+    ctx.drawImage(tetrisGridLayer(), 0, 0)
+    ctx.drawImage(tetrisBoardLayer(boardRef.current, seqRef.current), 0, 0)
 
     const board = boardRef.current
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if (board[r][c]) drawCell(ctx, c * CELL, r * CELL, CELL, board[r][c])
-      }
-    }
 
     const drawGhost = (piece, alpha) => {
       if (!piece) return
@@ -325,7 +342,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
 
     const pp = partnerRef.current
     if (duoRef.current && pp && pp.round === roundRef.current && pp.piece && pp.alive !== false) {
-      ctx.globalAlpha = 0.92
+      ctx.globalAlpha = 0.62
       drawPiece(unpackPiece(pp.piece))
       ctx.globalAlpha = 1
     }
@@ -358,6 +375,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     roundRef.current = round
     startAtRef.current = startAt
     seqRef.current = 0
+    overlapRestartingRef.current = false
     setScore(0); setLines(0); setLevel(1); setReward(null)
     setPhase('running')
     publishBoard()
@@ -371,60 +389,41 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     beginRound(startAt, round, withPartner)
     if (withPartner) setTetrisSession(rt, { startAt, round, by: rt.identity, duo: true })
   }, [rt, session, partnerOnline, together, solo, beginRound])
+  startRoundRef.current = startRound
 
   useEffect(() => {
     if (!together) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
-    const partnerInRound = partnerLive && partnerLive.round === session.round
-    if (!partnerInRound && session.startAt && Date.now() > session.startAt + 8000) return
     beginRound(session.startAt, session.round, true)
-  }, [together, session, beginRound, partnerLive])
+  }, [together, session, beginRound])
 
-  // take the shared board when my partner locked a piece.
-  useEffect(() => {
-    if (!duoRef.current) return
-    if (!sharedBoard || sharedBoard.round !== roundRef.current) return
-    if ((sharedBoard.seq || 0) <= seqRef.current) return
-    if (!sharedBoard.cells) return
-    seqRef.current = sharedBoard.seq
-    boardRef.current = unpackBoard(sharedBoard.cells)
-    if (typeof sharedBoard.score === 'number') {
-      scoreRef.current = sharedBoard.score
-      setScore(sharedBoard.score)
-    }
-    if (typeof sharedBoard.lines === 'number') {
-      linesRef.current = sharedBoard.lines
-      setLines(sharedBoard.lines)
-    }
-    if (typeof sharedBoard.level === 'number') {
-      levelRef.current = sharedBoard.level
-      setLevel(sharedBoard.level)
-    }
-    const piece = pieceRef.current
-    if (piece && collides(piece, boardRef.current, 0, 0)) {
-      for (const dy of [-1, -2, -3, 1]) {
-        if (!collides(piece, boardRef.current, 0, dy)) { piece.y += dy; break }
+  useGameLoop((time) => {
+    const last = lastTimeRef.current || time
+    const delta = time - last
+    lastTimeRef.current = time
+
+    if (duoRef.current) {
+      const sharedBoard = boardWatchRef.current
+      if (sharedBoard && sharedBoard.round === roundRef.current && (sharedBoard.seq || 0) > seqRef.current && sharedBoard.cells) {
+        seqRef.current = sharedBoard.seq
+        boardRef.current = unpackBoard(sharedBoard.cells)
+        if (typeof sharedBoard.score === 'number') scoreRef.current = sharedBoard.score
+        if (typeof sharedBoard.lines === 'number') linesRef.current = sharedBoard.lines
+        if (typeof sharedBoard.level === 'number') levelRef.current = sharedBoard.level
+        const piece = pieceRef.current
+        if (piece && pieceOverlapsBoard(piece, boardRef.current)) restartFromOverlap()
+      }
+      const partnerLive = partnerRef.current
+      if (runningRef.current && partnerLive && partnerLive.round === roundRef.current && partnerLive.alive === false) {
+        runningRef.current = false
+        setPhase('over')
       }
     }
-  }, [sharedBoard, collides])
 
-  // if my partner tops out, the shared game is over.
-  useEffect(() => {
-    if (!duoRef.current) return
-    if (phase !== 'running') return
-    if (!partnerLive || partnerLive.round !== roundRef.current) return
-    if (partnerLive.alive === false) setPhase('over')
-  }, [phase, partnerLive])
+    const started = startAtRef.current != null && Date.now() >= startAtRef.current
 
-  useEffect(() => {
-    const step = (time) => {
-      const last = lastTimeRef.current || time
-      const delta = time - last
-      lastTimeRef.current = time
-      const started = startAtRef.current != null && Date.now() >= startAtRef.current
-
-      if (runningRef.current && started && pieceRef.current) {
+    if (runningRef.current && started && pieceRef.current) {
         if (fastDropRef.current != null) {
           const STEP_MS = 16
           fastTimerRef.current += delta
@@ -452,11 +451,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
       }
       draw()
       drawNext()
-      rafRef.current = requestAnimationFrame(step)
-    }
-    rafRef.current = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [collides, hitsBoard, lockPiece, draw, drawNext, publishMe])
+  })
 
   useEffect(() => () => clearTetrisPlayer(rt), [rt])
 
@@ -528,9 +523,17 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     return () => window.removeEventListener('keydown', handler)
   }, [move, softDrop, hardDrop, rotate])
 
-  const partnerScore = (partnerLive && partnerLive.round === roundRef.current)
-    ? (partnerLive.score ?? 0)
-    : null
+  const [partnerScore, setPartnerScore] = useState(null)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const ps = partnerRef.current
+      setPartnerScore(ps && ps.round === roundRef.current ? (ps.score ?? 0) : null)
+      setScore(scoreRef.current)
+      setLines(linesRef.current)
+      setLevel(levelRef.current)
+    }, 140)
+    return () => clearInterval(id)
+  }, [partnerRef])
 
   return (
     <div className="game-wrap screen-enter">
@@ -579,7 +582,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
               <div className="go-msg">
                 {solo || !partnerOnline
                   ? 'play your own well.'
-                  : `one well, two pieces — you and ${partner} each drop a block.`}
+                  : `one well, two pieces — pass through ${partner}'s falling block. if you both lock on the same cells, the game restarts.`}
               </div>
               <button className="btn btn-cyan mt-16" onClick={startRound}>start</button>
             </div>
@@ -631,4 +634,39 @@ function drawCell(ctx, x, y, size, color) {
   ctx.fillStyle = 'rgba(0,0,0,0.3)'
   ctx.fillRect(x + 1, y + size - 4, size - 2, 3)
   ctx.fillRect(x + size - 4, y + 1, 3, size - 2)
+}
+
+let gridLayer = null
+function tetrisGridLayer() {
+  if (gridLayer) return gridLayer
+  gridLayer = makeLayer(COLS * CELL, ROWS * CELL, (ctx) => {
+    ctx.fillStyle = '#07021a'
+    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
+    ctx.strokeStyle = 'rgba(160,107,255,0.08)'
+    ctx.lineWidth = 1
+    for (let x = 0; x <= COLS; x++) {
+      ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, ROWS * CELL); ctx.stroke()
+    }
+    for (let y = 0; y <= ROWS; y++) {
+      ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(COLS * CELL, y * CELL); ctx.stroke()
+    }
+  })
+  return gridLayer
+}
+
+let boardLayer = null
+let boardSig = -1
+function tetrisBoardLayer(board, seq) {
+  if (boardLayer && boardSig === seq) return boardLayer
+  boardSig = seq
+  boardLayer = makeLayer(COLS * CELL, ROWS * CELL, (ctx) => {
+    ctx.clearRect(0, 0, COLS * CELL, ROWS * CELL)
+    ctx.globalAlpha = 0.42
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (board[r][c]) drawCell(ctx, c * CELL, r * CELL, CELL, board[r][c])
+      }
+    }
+  })
+  return boardLayer
 }

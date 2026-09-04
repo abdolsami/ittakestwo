@@ -20,6 +20,7 @@ import Wordle from './games/Wordle'
 import Tetris from './games/Tetris'
 import Snake from './games/Snake'
 import FlappyBird from './games/FlappyBird'
+import PacMan from './games/PacMan'
 
 const PET_MESSAGES = [
   'your pet seems happy to see you',
@@ -37,7 +38,7 @@ const NUDGE_MESSAGES = [
 ]
 
 const gameEmoji = (g) => (
-  g === 'snake' ? '🐍' : g === 'tetris' ? '🧱' : g === 'flappy' ? '🐤' : '🔤'
+  g === 'snake' ? '🐍' : g === 'tetris' ? '🧱' : g === 'flappy' ? '🐤' : g === 'pacman' ? '👻' : '🔤'
 )
 
 export default function World({ identity, onLogout }) {
@@ -46,7 +47,7 @@ export default function World({ identity, onLogout }) {
   const notify = useNotify()
 
   const {
-    pet, mood, days, setName, setSpecies, applyReward, recordGame, feed, petThePet, resetPet,
+    pet, mood, days, setName, setSpecies, setLook, applyReward, recordGame, feed, petThePet, resetPet,
   } = usePet(identity)
 
   const partnerOnline = usePartnerOnline()
@@ -207,8 +208,8 @@ export default function World({ identity, onLogout }) {
   // ---- onboarding: pick your animal ----
   if (!pet.species) {
     return (
-      <AnimalPicker identity={identity} onPick={(species, label) => {
-        setSpecies(species, label)
+      <AnimalPicker identity={identity} onPick={(species, label, look) => {
+        setSpecies(species, label, look)
         setTab('home')
         setTimeout(() => notify(`say hi to your new ${label}!`, '😊'), 400)
       }} />
@@ -239,7 +240,10 @@ export default function World({ identity, onLogout }) {
               <Snake onExit={exit} onFinish={onGameFinish('snake')} highScore={pet.highScores?.snake || 0} />
             )}
             {activeGame === 'flappy' && (
-              <FlappyBird onExit={exit} onFinish={onGameFinish('flappy')} highScore={pet.highScores?.flappy || 0} mySpecies={pet.species} />
+              <FlappyBird onExit={exit} onFinish={onGameFinish('flappy')} highScore={pet.highScores?.flappy || 0} mySpecies={pet.species} myColor={pet.color} myAccessory={pet.accessory} />
+            )}
+            {activeGame === 'pacman' && (
+              <PacMan onExit={exit} onFinish={onGameFinish('pacman')} highScore={pet.highScores?.pacman || 0} mySpecies={pet.species} myColor={pet.color} myAccessory={pet.accessory} />
             )}
           </main>
           <aside className="game-side">
@@ -291,7 +295,7 @@ export default function World({ identity, onLogout }) {
             {tab === 'park' && (
               <PetPark
                 identity={identity} partner={partner}
-                myPet={{ species: pet.species, name: pet.name, mood }}
+                myPet={{ species: pet.species, name: pet.name, mood, color: pet.color, accessory: pet.accessory }}
                 partnerPet={partnerPet} friendship={friendship}
                 partnerOnline={partnerOnline} notify={notify}
               />
@@ -303,6 +307,7 @@ export default function World({ identity, onLogout }) {
                 onFeed={() => setTab('feed')}
                 onPet={handlePet}
                 onRename={setName}
+                onLook={setLook}
                 onWave={handleWave}
                 onGift={handleGift}
               />

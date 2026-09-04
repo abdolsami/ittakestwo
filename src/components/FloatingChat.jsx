@@ -6,7 +6,7 @@ import {
 import { useChat } from '../hooks/useWorldEvents'
 import { desktopNotify } from '../hooks/useDesktopNotify'
 
-const QUICK = ['hi!', 'come to the park!', 'play a game?', 'good night!', 'mehreen!', 'ali!']
+const QUICK = ['hi!', 'come to the park!', 'play a game?', 'mehreen!', 'ali!']
 const EMOJIS = [
   '🙄', '😚', '🥺', '😓', '🤞', '🙂', '🤬', '✌️',
   '😮', '😍', '💔', '😭', '😣', '😌', '👅', '🤔',

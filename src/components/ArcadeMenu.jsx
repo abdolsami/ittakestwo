@@ -12,7 +12,7 @@ export default function ArcadeMenu({ pet, onSelect, identity = 'you', partner, p
       {partner && (
         <p className={`versus-note ${partnerOnline ? 'on' : ''}`}>
           {partnerOnline
-            ? `${partner} is online — tetris, snake, flappy & wordle are two-player!`
+            ? `${partner} is online — tetris, snake, flappy, pac-man & wordle are two-player!`
             : `${partner} is away — play solo, or wait for them to play together.`}
         </p>
       )}
@@ -53,6 +53,15 @@ export default function ArcadeMenu({ pet, onSelect, identity = 'you', partner, p
           topColor="var(--pink)"
           btnClass="btn-pink"
           onPlay={() => onSelect('flappy')}
+        />
+        <GameCard
+          title="pac-man"
+          desc="your pet · 1P or 2P maze"
+          emoji="👻"
+          highScore={pet.highScores?.pacman || 0}
+          topColor="var(--purple)"
+          btnClass="btn-purple"
+          onPlay={() => onSelect('pacman')}
         />
       </div>
 

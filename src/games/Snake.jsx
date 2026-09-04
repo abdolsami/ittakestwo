@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { snakeReward } from '../utils/rewards'
-import { useRealtime, useWatch, usePartnerOnline } from '../realtime/RealtimeContext'
+import { useRealtime, useWatch, useWatchRef, usePartnerOnline } from '../realtime/RealtimeContext'
 import { usePlayTogether } from '../hooks/usePlayTogether'
+import { useGameLoop } from '../hooks/useGameLoop'
+import { get2d, makeLayer } from '../utils/canvas'
 import PlayInvite from '../components/PlayInvite'
 import { setSnakeSession, setSnakePlayer, clearSnakePlayer } from '../realtime/world'
 import { isTypingInField } from '../utils/keys'
@@ -47,10 +49,10 @@ export default function Snake({ onExit, onFinish, highScore }) {
   const partnerOnline = usePartnerOnline()
   const { ask, together, solo, playTogether, playSolo } = usePlayTogether('snake')
   const session = useWatch('games/snake/session')
-  const partnerState = useWatch(`games/snake/players/${partner}`)
+  const partnerRef = useWatchRef(`games/snake/players/${partner}`)
 
   const canvasRef = useRef(null)
-  const rafRef = useRef(0)
+  const partnerDrawRef = useRef([])
 
   const snakeRef = useRef([])
   const prevBodyRef = useRef([])
@@ -68,8 +70,6 @@ export default function Snake({ onExit, onFinish, highScore }) {
   const crashRef = useRef(null)
   const duoRef = useRef(false)
 
-  const partnerRef = useRef(null)
-  partnerRef.current = partnerState
   const partnerOnlineRef = useRef(partnerOnline)
   partnerOnlineRef.current = partnerOnline
 
@@ -81,7 +81,7 @@ export default function Snake({ onExit, onFinish, highScore }) {
   const publish = useCallback((force) => {
     if (!duoRef.current) return
     const now = Date.now()
-    if (!force && now - lastPubRef.current < 70) return
+    if (!force && now - lastPubRef.current < 45) return
     lastPubRef.current = now
     setSnakePlayer(rt, {
       body: snakeRef.current,
@@ -101,6 +101,7 @@ export default function Snake({ onExit, onFinish, highScore }) {
     const isHigh = s > (highScore || 0)
     setBest((b) => Math.max(b, s))
     const r = snakeReward(s)
+    setScore(s)
     setReward({ ...r, isHigh })
     setPhase('over')
     onFinish(r, s, isHigh)
@@ -130,6 +131,7 @@ export default function Snake({ onExit, onFinish, highScore }) {
     accRef.current = 0
     lastTimeRef.current = 0
     crashRef.current = null
+    partnerDrawRef.current = []
     setScore(0)
     setReward(null)
     setPhase('running')
@@ -149,27 +151,8 @@ export default function Snake({ onExit, onFinish, highScore }) {
     if (!together) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
-    const partnerInRound = partnerState && partnerState.round === session.round
-    if (!partnerInRound && session.startAt && Date.now() > session.startAt + 8000) return
     beginRound(session.startAt, session.round, true)
-  }, [together, session, beginRound, partnerState])
-
-  // if my partner crashed into me, I die too.
-  useEffect(() => {
-    if (phase !== 'running') return
-    if (!aliveRef.current) return
-    if (Date.now() < (startAtRef.current || 0)) return
-    const ps = partnerState
-    if (ps && duoRef.current && ps.round === roundRef.current && ps.alive === false && ps.crash === roundRef.current) die()
-  }, [phase, partnerState, die])
-
-  // resolve the round once I'm dead and my partner is done (or gone).
-  useEffect(() => {
-    if (phase !== 'dead') return
-    const ps = partnerState
-    const partnerDone = !duoRef.current || !ps || ps.round !== roundRef.current || ps.alive === false || !partnerOnline
-    if (partnerDone) finishRound()
-  }, [phase, partnerState, partnerOnline, finishRound])
+  }, [together, session, beginRound])
 
   const setDir = useCallback((x, y) => {
     // never reverse straight back onto yourself.
@@ -219,7 +202,6 @@ export default function Snake({ onExit, onFinish, highScore }) {
 
     if (nx === foodRef.current.x && ny === foodRef.current.y) {
       scoreRef.current += 1
-      setScore(scoreRef.current)
       foodRef.current = randCell(snake)
     } else {
       snake.pop()
@@ -229,16 +211,8 @@ export default function Snake({ onExit, onFinish, highScore }) {
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
-
-    ctx.fillStyle = '#07021a'
-    ctx.fillRect(0, 0, SIZE, SIZE)
-
-    ctx.strokeStyle = 'rgba(160,107,255,0.06)'
-    for (let i = 0; i <= GRID; i++) {
-      ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, SIZE); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(SIZE, i * CELL); ctx.stroke()
-    }
+    const ctx = get2d(canvas)
+    ctx.drawImage(snakeGridLayer(), 0, 0)
 
     const interval = speedFor(scoreRef.current)
     const running = phase === 'running' && aliveRef.current
@@ -255,7 +229,8 @@ export default function Snake({ onExit, onFinish, highScore }) {
       if (ps.food) drawFood(ctx, ps.food, 'rgba(255,159,67,0.55)')
       const pBody = snakeCells(ps.body)
       if (pBody.length) {
-        drawSnake(ctx, pBody, pBody, 1, ps.dir, '#4be0e0', '#2f9ea0', ps.alive === false)
+        const smooth = smoothSnake(pBody, partnerDrawRef)
+        drawSnake(ctx, smooth, smooth, 1, ps.dir, '#4be0e0', '#2f9ea0', ps.alive === false)
       }
     }
 
@@ -274,39 +249,49 @@ export default function Snake({ onExit, onFinish, highScore }) {
     }
   }, [phase])
 
-  // main loop
-  useEffect(() => {
-    const loop = (time) => {
-      const last = lastTimeRef.current || time
-      const delta = time - last
-      lastTimeRef.current = time
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
 
-      const running = phase === 'running' && aliveRef.current
-        && startAtRef.current != null && Date.now() >= startAtRef.current
-      if (running) {
-        const interval = speedFor(scoreRef.current)
-        accRef.current += delta
-        let guard = 0
-        while (accRef.current >= interval && aliveRef.current && guard < 8) {
-          accRef.current -= interval
-          guard++
-          tick()
-        }
-        publish(false)
+  useGameLoop((time) => {
+    const last = lastTimeRef.current || time
+    const delta = time - last
+    lastTimeRef.current = time
+    const ps = partnerRef.current
+
+    if (phaseRef.current === 'running' && aliveRef.current && Date.now() >= (startAtRef.current || 0)) {
+      if (ps && duoRef.current && ps.round === roundRef.current && ps.alive === false && ps.crash === roundRef.current) die()
+      const interval = speedFor(scoreRef.current)
+      accRef.current += delta
+      let guard = 0
+      while (accRef.current >= interval && aliveRef.current && guard < 4) {
+        accRef.current -= interval
+        guard++
+        tick()
       }
-      draw()
-      rafRef.current = requestAnimationFrame(loop)
+      publish(false)
     }
-    rafRef.current = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [phase, tick, draw, publish])
+    if (phaseRef.current === 'dead') {
+      const partnerDone = !duoRef.current || !ps || ps.round !== roundRef.current || ps.alive === false || !partnerOnlineRef.current
+      if (partnerDone) finishRound()
+    }
+    draw()
+  })
 
   // clean up my published snake when leaving.
   useEffect(() => () => clearSnakePlayer(rt), [rt])
 
-  const partnerScore = (partnerState && partnerState.round === roundRef.current)
-    ? (partnerState.score ?? 0)
-    : null
+  const [partnerScore, setPartnerScore] = useState(null)
+  const [themDead, setThemDead] = useState(false)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const ps = partnerRef.current
+      const same = ps && ps.round === roundRef.current
+      setPartnerScore(same ? (ps.score ?? 0) : null)
+      setThemDead(Boolean(same && ps.alive === false))
+      setScore(scoreRef.current)
+    }, 140)
+    return () => clearInterval(id)
+  }, [partnerRef])
 
   return (
     <div className="game-wrap screen-enter">
@@ -349,7 +334,7 @@ export default function Snake({ onExit, onFinish, highScore }) {
           </div>
         )}
 
-        {phase === 'dead' && (together || (!solo && partnerOnline)) && !(partnerState && partnerState.round === roundRef.current && partnerState.alive === false) && (
+        {phase === 'dead' && (together || (!solo && partnerOnline)) && !themDead && (
           <div className="overlay" style={{ position: 'absolute', background: 'rgba(4,1,15,0.5)' }}>
             <div className="game-over-card">
               <div className="go-title">crashed!</div>
@@ -397,6 +382,34 @@ export default function Snake({ onExit, onFinish, highScore }) {
       )}
     </div>
   )
+}
+
+let gridLayer = null
+function snakeGridLayer() {
+  if (gridLayer) return gridLayer
+  gridLayer = makeLayer(SIZE, SIZE, (ctx) => {
+    ctx.fillStyle = '#07021a'
+    ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.strokeStyle = 'rgba(160,107,255,0.06)'
+    for (let i = 0; i <= GRID; i++) {
+      ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, SIZE); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(SIZE, i * CELL); ctx.stroke()
+    }
+  })
+  return gridLayer
+}
+
+function smoothSnake(body, drawRef) {
+  const drawn = drawRef.current
+  if (!drawn.length || drawn.length !== body.length) {
+    drawRef.current = body.map((p) => ({ x: p.x, y: p.y }))
+    return drawRef.current
+  }
+  for (let i = 0; i < body.length; i++) {
+    drawn[i].x += (body[i].x - drawn[i].x) * 0.42
+    drawn[i].y += (body[i].y - drawn[i].y) * 0.42
+  }
+  return drawn
 }
 
 function drawFood(ctx, f, color) {
