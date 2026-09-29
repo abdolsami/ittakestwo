@@ -36,28 +36,39 @@ export function emitEvent(rt, event) {
 
 export function sendChat(rt, text) {
   const clean = String(text).trim().slice(0, 300)
-  if (!rt || !clean) return
-  rt.push('chat', { from: rt.identity, text: clean, ts: Date.now() })
+  if (!rt || !clean) return Promise.reject(new Error('empty'))
+  const payload = { from: rt.identity, text: clean, ts: Date.now() }
+  const pushed = rt.push('chat', payload)
+  const key = typeof pushed === 'string' ? pushed : pushed?.key
+  return Object.assign(Promise.resolve(pushed), { key, payload })
 }
 
-// ---- chat presence: live typing + read receipts ----
-// each person keeps a small record at chatMeta/<id>:
-//   typing    – timestamp of the last keystroke (0 when not typing)
-//   delivered – ts of the newest message this person has received
-//   seen      – ts of the newest message this person has actually looked at
+// typing / receipts are optional extras — never block chat if they fail.
+let chatMetaOk = true
+
+function softSet(rt, path, value) {
+  if (!rt || !chatMetaOk) return
+  Promise.resolve(rt.set(path, value)).then(
+    () => { chatMetaOk = true },
+    (err) => {
+      const msg = String(err?.code || err?.message || err || '')
+      if (/permission_denied/i.test(msg)) chatMetaOk = false
+    },
+  )
+}
+
 export function setChatTyping(rt, isTyping) {
-  if (!rt) return
-  rt.set(`chatMeta/${rt.identity}/typing`, isTyping ? Date.now() : 0)
+  softSet(rt, `chatMeta/${rt.identity}/typing`, isTyping ? Date.now() : 0)
 }
 
 export function setChatDelivered(rt, ts) {
-  if (!rt || !ts) return
-  rt.set(`chatMeta/${rt.identity}/delivered`, ts)
+  if (!ts) return
+  softSet(rt, `chatMeta/${rt.identity}/delivered`, ts)
 }
 
 export function setChatSeen(rt, ts) {
-  if (!rt || !ts) return
-  rt.set(`chatMeta/${rt.identity}/seen`, ts)
+  if (!ts) return
+  softSet(rt, `chatMeta/${rt.identity}/seen`, ts)
 }
 
 // bump the shared friendship score. only the initiator calls this so it isn't

@@ -144,7 +144,10 @@ export class LocalClient {
   push(path, value) {
     const key = `k${Date.now()}${Math.random().toString(36).slice(2, 6)}`
     this.set(`${path}/${key}`, value)
-    return key
+    // match firebase: thenable with an immediate .key
+    const done = Promise.resolve(key)
+    done.key = key
+    return done
   }
 
   remove(path) {

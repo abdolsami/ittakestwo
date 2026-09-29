@@ -278,7 +278,7 @@ export default function World({ identity, onLogout }) {
 
       {tab === 'chat' ? (
         <div className="screen screen-chat" key="chat">
-          <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} docked />
+          <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} docked autoFocus />
         </div>
       ) : (
         <div className="game-layout page-layout" key={tab}>

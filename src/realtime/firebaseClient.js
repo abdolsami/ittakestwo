@@ -17,8 +17,11 @@ export class FirebaseClient {
 
   watch(path, cb) {
     const r = ref(this.db, path)
-    const unsub = onValue(r, (snap) => cb(snap.val()))
-    return unsub
+    return onValue(
+      r,
+      (snap) => cb(snap.val()),
+      () => cb(null),
+    )
   }
 
   // firebase exposes a special ".info/connected" path that flips to true once
@@ -37,8 +40,8 @@ export class FirebaseClient {
   }
 
   push(path, value) {
-    const r = push(ref(this.db, path), value)
-    return r.key
+    // ThenableReference: has .key immediately and resolves when the write finishes.
+    return push(ref(this.db, path), value)
   }
 
   remove(path) {

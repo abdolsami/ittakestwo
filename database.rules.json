@@ -7,10 +7,7 @@
         ".read": true,
         ".write": true,
         "chat": {
-          ".indexOn": ["ts"],
-          "$msg": {
-            ".validate": "newData.hasChildren(['from','text','ts'])"
-          }
+          ".indexOn": ["ts"]
         },
         "events": {
           ".indexOn": ["ts"]

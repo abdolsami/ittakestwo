@@ -65,11 +65,11 @@ export function useWorldMaintenance() {
 // live chat log (last `limit` messages).
 export function useChat(limit = 50) {
   const chat = useWatch('chat', {})
-  return useMemo(() => (
-    Object.entries(chat || {})
-      .map(([id, m]) => ({ id, ...m }))
-      .filter((m) => m && m.ts)
-      .sort((a, b) => a.ts - b.ts)
-      .slice(-limit)
-  ), [chat, limit])
+  return useMemo(() => {
+    const list = Object.entries(chat || {})
+      .map(([id, m]) => (m && m.ts ? { id, ...m } : null))
+      .filter(Boolean)
+    list.sort((a, b) => a.ts - b.ts)
+    return list.length > limit ? list.slice(-limit) : list
+  }, [chat, limit])
 }

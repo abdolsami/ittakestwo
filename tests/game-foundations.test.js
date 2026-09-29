@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { applyDecay } from '../src/utils/petDecay.js'
 import { claimActivity, dailyState, recordActivity, activityProgress } from '../src/utils/dailyActivities.js'
 import { LocalClient } from '../src/realtime/localClient.js'
+import { isTypingInField } from '../src/utils/keys.js'
 
 const now = Date.UTC(2026, 8, 6, 12)
 const pet = { hunger: 75, happiness: 70, energy: 80, health: 90, lastVisit: now }
@@ -51,6 +52,40 @@ test('parent subscriptions receive immutable snapshots when children change', ()
     let original
     client.watch('chat/one', value => { original = value.text })
     assert.equal(original, 'Hello')
+  } finally {
+    client.destroy()
+    delete globalThis.window
+  }
+})
+
+test('chat and text fields are not treated as game controls', () => {
+  assert.equal(isTypingInField({ target: { tagName: 'INPUT' } }), true)
+  assert.equal(isTypingInField({ target: { tagName: 'TEXTAREA' } }), true)
+  assert.equal(isTypingInField({
+    target: { tagName: 'DIV', closest: (sel) => sel.includes('.chat-panel') ? {} : null },
+  }), true)
+  assert.equal(isTypingInField({ target: { tagName: 'DIV', closest: () => null } }), false)
+  assert.equal(isTypingInField({ target: null }), false)
+})
+
+test('sendChat returns an immediate key and writes a clean payload', async () => {
+  const storage = new Map()
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+    },
+  }
+  const client = new LocalClient()
+  try {
+    const payload = { from: 'mehreenz', text: 'hello there', ts: Date.now() }
+    const pushed = client.push('worlds/test/chat', payload)
+    assert.ok(pushed.key)
+    await pushed
+    let saved
+    client.watch(`worlds/test/chat/${pushed.key}`, (value) => { saved = value })
+    assert.equal(saved.text, 'hello there')
+    assert.equal(saved.from, 'mehreenz')
   } finally {
     client.destroy()
     delete globalThis.window

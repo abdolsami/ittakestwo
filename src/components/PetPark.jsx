@@ -154,6 +154,7 @@ export default function PetPark({
       held.current.add(d)
     }
     const up = (e) => {
+      if (isTypingInField(e)) return
       const d = KEY[e.key]
       if (!d) return
       held.current.delete(d)
