@@ -11,19 +11,18 @@ export const REALTIME_MODE = isFirebaseConfigured() ? 'firebase' : 'local'
 const ONLINE_WINDOW = 12000
 
 export function RealtimeProvider({ code, identity, children }) {
-  const clientRef = useRef(null)
-  if (!clientRef.current) {
-    clientRef.current = isFirebaseConfigured() ? new FirebaseClient() : new LocalClient()
-  }
-  const client = clientRef.current
-  const base = `worlds/${worldIdFromCode(code)}`
+  const [client, setClient] = useState(null)
+  useEffect(() => {
+    const connection = isFirebaseConfigured() ? new FirebaseClient() : new LocalClient()
+    setClient(connection)
+    return () => connection.destroy?.()
+  }, [])
+  if (!client) return <div role="status" className="gate">Opening your world…</div>
+  return <ConnectedWorld client={client} code={code} identity={identity}>{children}</ConnectedWorld>
+}
 
-  // tear the client down when the provider unmounts (e.g. on logout) so we
-  // don't leak a BroadcastChannel that keeps handling messages.
-  useEffect(() => () => {
-    if (typeof client.destroy === 'function') client.destroy()
-    clientRef.current = null
-  }, [client])
+function ConnectedWorld({ client, code, identity, children }) {
+  const base = `worlds/${worldIdFromCode(code)}`
 
   const api = useMemo(() => ({
     client,

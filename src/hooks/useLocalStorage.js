@@ -16,6 +16,7 @@ export function useLocalStorage(key, initialValue) {
 
   const keyRef = useRef(key)
   keyRef.current = key
+  const valueRef = useRef(value)
 
   useEffect(() => {
     try {
@@ -26,7 +27,11 @@ export function useLocalStorage(key, initialValue) {
   }, [value])
 
   const set = useCallback((next) => {
-    setValue((prev) => (typeof next === 'function' ? next(prev) : next))
+    // Resolve against the latest value immediately, including multiple actions
+    // in one event. React updater functions may run later or more than once.
+    const resolved = typeof next === 'function' ? next(valueRef.current) : next
+    valueRef.current = resolved
+    setValue(resolved)
   }, [])
 
   return [value, set]

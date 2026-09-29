@@ -6,9 +6,10 @@ import { usePlayTogether } from '../hooks/usePlayTogether'
 import { useGameLoop } from '../hooks/useGameLoop'
 import { shouldPublish } from '../utils/publish'
 import { get2d, makeLayer } from '../utils/canvas'
+import { createTetrisAuthority } from '../utils/tetrisAuthority'
 import PlayInvite from '../components/PlayInvite'
 import {
-  setTetrisSession, setTetrisPlayer, clearTetrisPlayer, setTetrisBoard,
+  setTetrisSession, setTetrisPlayer, clearTetrisPlayer,
 } from '../realtime/world'
 import './games.css'
 
@@ -99,7 +100,16 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   const { ask, together, solo, playTogether, playSolo } = usePlayTogether('tetris')
   const session = useWatch('games/tetris/session')
   const partnerRef = useWatchRef(`games/tetris/players/${partner}`)
-  const boardWatchRef = useWatchRef('games/tetris/board')
+  const [activeRound, setActiveRound] = useState(0)
+  const boardWatchRef = useWatchRef(`games/tetris/rounds/${activeRound}/board`)
+  const commandsRef = useWatchRef(`games/tetris/rounds/${activeRound}/commands`)
+  const authorityRef = useRef(null)
+  const hostIdentityRef = useRef(null)
+  const committedBoardRef = useRef(null)
+  const processingRef = useRef(false)
+  const pendingRef = useRef(null)
+  const commandIdRef = useRef(0)
+  const dropPointsRef = useRef(0)
 
   const canvasRef = useRef(null)
   const nextCanvasRef = useRef(null)
@@ -205,23 +215,48 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   }, [rt])
 
   const publishBoard = useCallback(() => {
-    if (!duoRef.current) return
     seqRef.current += 1
-    setTetrisBoard(rt, {
-      cells: packBoard(boardRef.current),
-      score: scoreRef.current,
-      lines: linesRef.current,
-      level: levelRef.current,
-      seq: seqRef.current,
-      round: roundRef.current,
-    })
-  }, [rt])
+  }, [])
+
+  const spawnNext = useCallback(() => {
+    const duo = duoRef.current
+    pieceRef.current = nextRef.current
+    pieceRef.current.x = spawnX(rt.identity, duo)
+    pieceRef.current.y = 0
+    nextRef.current = randomPiece(rt.identity, duo)
+    dropTimerRef.current = 0
+    if (hitsBoard(pieceRef.current, boardRef.current)) {
+      runningRef.current = false
+      setPhase('over')
+    }
+    publishMe(true)
+  }, [rt.identity, hitsBoard, publishMe])
 
   const lockPiece = useCallback(() => {
     const piece = pieceRef.current
-    if (!piece) return
+    if (!piece || pendingRef.current) return
     if (duoRef.current && (hitsPartner(piece, 0, 0) || pieceOverlapsBoard(piece, boardRef.current))) {
       restartFromOverlap()
+      return
+    }
+    if (duoRef.current) {
+      const command = {
+        round: roundRef.current, by: rt.identity, id: ++commandIdRef.current,
+        piece: packPiece(piece), points: dropPointsRef.current,
+      }
+      pendingRef.current = command
+      // Keep the piece frozen until its board+ack snapshot arrives. Each player
+      // owns one mailbox and cannot overwrite an unacknowledged placement.
+      const send = () => Promise.resolve(rt.set(
+        `games/tetris/rounds/${command.round}/commands/${rt.identity}`, {
+          round: command.round, by: command.by, id: command.id,
+          piece: command.piece, points: command.points,
+        },
+      )).catch(() => {
+        if (pendingRef.current === command) pendingRef.current.retryAt = Date.now() + 1000
+      })
+      command.send = send
+      send()
       return
     }
     const board = boardRef.current
@@ -252,19 +287,9 @@ export default function Tetris({ onExit, onFinish, highScore }) {
       }
     }
 
-    const duo = duoRef.current
-    pieceRef.current = nextRef.current
-    pieceRef.current.x = spawnX(rt.identity, duo)
-    pieceRef.current.y = 0
-    nextRef.current = randomPiece(rt.identity, duo)
     publishBoard()
-
-    if (hitsBoard(pieceRef.current, boardRef.current, 0, 0)) {
-      runningRef.current = false
-      setPhase('over')
-    }
-    publishMe(true)
-  }, [hitsBoard, hitsPartner, pieceOverlapsBoard, publishBoard, publishMe, restartFromOverlap, rt.identity])
+    spawnNext()
+  }, [hitsPartner, pieceOverlapsBoard, publishBoard, spawnNext, restartFromOverlap, rt])
 
   const endGame = useCallback(() => {
     if (finishedRef.current) return
@@ -358,7 +383,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     }
   }, [collides, phase])
 
-  const beginRound = useCallback((startAt, round, duo) => {
+  const beginRound = useCallback((startAt, round, duo, host = rt.identity) => {
     duoRef.current = duo
     boardRef.current = emptyBoard()
     pieceRef.current = randomPiece(rt.identity, duo)
@@ -375,12 +400,29 @@ export default function Tetris({ onExit, onFinish, highScore }) {
     roundRef.current = round
     startAtRef.current = startAt
     seqRef.current = 0
+    setActiveRound(round)
+    pendingRef.current = null
+    commandIdRef.current = 0
+    dropPointsRef.current = 0
+    processingRef.current = false
+    committedBoardRef.current = null
+    hostIdentityRef.current = host
+    authorityRef.current = duo && rt.identity === host ? createTetrisAuthority({
+      board: emptyBoard(), score: 0, lines: 0, level: 1, seq: 0, round, ack: {},
+    }, async state => {
+      const snapshot = {
+        cells: packBoard(state.board), score: state.score, lines: state.lines,
+        level: state.level, seq: state.seq, round, ack: state.ack,
+      }
+      await rt.set(`games/tetris/rounds/${round}/board`, snapshot)
+      if (roundRef.current === round) committedBoardRef.current = snapshot
+    }) : null
     overlapRestartingRef.current = false
     setScore(0); setLines(0); setLevel(1); setReward(null)
     setPhase('running')
-    publishBoard()
+    if (!duo) publishBoard()
     publishMe(true)
-  }, [rt.identity, publishBoard, publishMe])
+  }, [rt, publishBoard, publishMe])
 
   const startRound = useCallback(() => {
     const withPartner = together || (!solo && partnerOnline)
@@ -392,29 +434,61 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   startRoundRef.current = startRound
 
   useEffect(() => {
-    if (!together) return
+    if (solo || (!together && !duoRef.current)) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
-    beginRound(session.startAt, session.round, true)
-  }, [together, session, beginRound])
+    beginRound(session.startAt, session.round, true, session.by)
+  }, [together, solo, session, beginRound])
 
   useGameLoop((time) => {
     const last = lastTimeRef.current || time
-    const delta = time - last
+    const delta = Math.min(100, time - last)
     lastTimeRef.current = time
 
     if (duoRef.current) {
-      const sharedBoard = boardWatchRef.current
-      if (sharedBoard && sharedBoard.round === roundRef.current && (sharedBoard.seq || 0) > seqRef.current && sharedBoard.cells) {
+      const pending = pendingRef.current
+      if (pending?.retryAt && Date.now() >= pending.retryAt) {
+        pending.retryAt = 0
+        pending.send()
+      }
+      const authority = authorityRef.current
+      if (authority && !processingRef.current && !overlapRestartingRef.current) {
+        const round = roundRef.current
+        const commands = Object.values(commandsRef.current || {})
+          .filter(command => command.round === round)
+        if (commands.length) {
+          processingRef.current = true
+          Promise.all(commands.map(command => authority.submit({
+            ...command, piece: unpackPiece(command.piece),
+          }))).then(states => {
+            if (roundRef.current === round && states.some(state => state.restart)) restartFromOverlap()
+          }).catch(() => {
+            // Retry the same IDs; the authority advances only after a successful write.
+          }).finally(() => {
+            if (roundRef.current === round) processingRef.current = false
+          })
+        }
+      }
+      const sharedBoard = rt.identity === hostIdentityRef.current ? committedBoardRef.current : boardWatchRef.current
+      if (sharedBoard && sharedBoard.round === roundRef.current && (sharedBoard.seq || 0) > seqRef.current) {
         seqRef.current = sharedBoard.seq
         boardRef.current = unpackBoard(sharedBoard.cells)
         if (typeof sharedBoard.score === 'number') scoreRef.current = sharedBoard.score
         if (typeof sharedBoard.lines === 'number') linesRef.current = sharedBoard.lines
         if (typeof sharedBoard.level === 'number') levelRef.current = sharedBoard.level
+        if (pendingRef.current && (sharedBoard.ack?.[rt.identity] || 0) >= pendingRef.current.id) {
+          pendingRef.current = null
+          dropPointsRef.current = 0
+          spawnNext()
+        }
         const piece = pieceRef.current
-        if (piece && pieceOverlapsBoard(piece, boardRef.current)) restartFromOverlap()
+        if (piece && !pendingRef.current && runningRef.current && pieceOverlapsBoard(piece, boardRef.current)) restartFromOverlap()
       }
       const partnerLive = partnerRef.current
+      if (runningRef.current && !partnerOnlineRef.current && Date.now() - startAtRef.current > 12000) {
+        runningRef.current = false
+        setPhase('over')
+      }
       if (runningRef.current && partnerLive && partnerLive.round === roundRef.current && partnerLive.alive === false) {
         runningRef.current = false
         setPhase('over')
@@ -423,7 +497,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
 
     const started = startAtRef.current != null && Date.now() >= startAtRef.current
 
-    if (runningRef.current && started && pieceRef.current) {
+    if (runningRef.current && started && pieceRef.current && !pendingRef.current) {
         if (fastDropRef.current != null) {
           const STEP_MS = 16
           fastTimerRef.current += delta
@@ -456,6 +530,7 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   useEffect(() => () => clearTetrisPlayer(rt), [rt])
 
   const move = useCallback((dx) => {
+    if (pendingRef.current) return
     if (fastDropRef.current != null || !runningRef.current || !pieceRef.current) return
     if (Date.now() < (startAtRef.current || 0)) return
     const piece = pieceRef.current
@@ -463,18 +538,21 @@ export default function Tetris({ onExit, onFinish, highScore }) {
   }, [collides, publishMe])
 
   const softDrop = useCallback(() => {
+    if (pendingRef.current) return
     if (fastDropRef.current != null || !runningRef.current || !pieceRef.current) return
     if (Date.now() < (startAtRef.current || 0)) return
     const piece = pieceRef.current
     if (!collides(piece, boardRef.current, 0, 1)) {
       piece.y++
-      scoreRef.current += 1
+      if (duoRef.current) dropPointsRef.current += 1
+      else scoreRef.current += 1
       setScore(scoreRef.current)
       dropTimerRef.current = 0
     } else if (hitsBoard(piece, boardRef.current, 0, 1)) lockPiece()
   }, [collides, hitsBoard, lockPiece])
 
   const hardDrop = useCallback(() => {
+    if (pendingRef.current) return
     if (fastDropRef.current != null || !runningRef.current || !pieceRef.current) return
     if (Date.now() < (startAtRef.current || 0)) return
     const piece = pieceRef.current
@@ -484,13 +562,15 @@ export default function Tetris({ onExit, onFinish, highScore }) {
       if (hitsBoard(piece, boardRef.current, 0, 1)) lockPiece()
       return
     }
-    scoreRef.current += dist * 2
+    if (duoRef.current) dropPointsRef.current += dist * 2
+    else scoreRef.current += dist * 2
     setScore(scoreRef.current)
     fastDropRef.current = piece.y + dist
     fastTimerRef.current = 0
   }, [collides, hitsBoard, lockPiece])
 
   const rotate = useCallback(() => {
+    if (pendingRef.current) return
     if (fastDropRef.current != null || !runningRef.current || !pieceRef.current) return
     if (Date.now() < (startAtRef.current || 0)) return
     const piece = pieceRef.current
@@ -656,9 +736,11 @@ function tetrisGridLayer() {
 
 let boardLayer = null
 let boardSig = -1
+let cachedBoard = null
 function tetrisBoardLayer(board, seq) {
-  if (boardLayer && boardSig === seq) return boardLayer
+  if (boardLayer && boardSig === seq && cachedBoard === board) return boardLayer
   boardSig = seq
+  cachedBoard = board
   boardLayer = makeLayer(COLS * CELL, ROWS * CELL, (ctx) => {
     ctx.clearRect(0, 0, COLS * CELL, ROWS * CELL)
     ctx.globalAlpha = 0.42

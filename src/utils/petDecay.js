@@ -12,19 +12,18 @@ const DECAY_PER_HOUR = {
 // cap how much decay can happen while away so a long absence is forgiving.
 const MAX_DECAY_HOURS = 18
 
-export function applyDecay(pet, now = Date.now()) {
+export function applyDecay(pet, now = Date.now(), active = false) {
   if (!pet || !pet.lastVisit) return pet
 
   const elapsedMs = now - pet.lastVisit
   if (elapsedMs <= 0) return pet
 
   const hours = Math.min(elapsedMs / (1000 * 60 * 60), MAX_DECAY_HOURS)
-  if (hours < 0.01) return pet
 
   const hunger = clamp(pet.hunger - DECAY_PER_HOUR.hunger * hours)
   const happiness = clamp(pet.happiness - DECAY_PER_HOUR.happiness * hours)
   // energy slowly recovers while away (the pet rests), but only a little.
-  const energy = clamp(pet.energy + 1.5 * hours)
+  const energy = clamp(pet.energy + (active ? -DECAY_PER_HOUR.energy : 1.5) * hours)
 
   // health softly follows how well fed and happy the pet is.
   const care = (hunger + happiness) / 2

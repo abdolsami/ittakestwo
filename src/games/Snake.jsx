@@ -148,11 +148,11 @@ export default function Snake({ onExit, onFinish, highScore }) {
   }, [rt, session, beginRound, together, solo, partnerOnline])
 
   useEffect(() => {
-    if (!together) return
+    if (solo || (!together && !duoRef.current)) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
     beginRound(session.startAt, session.round, true)
-  }, [together, session, beginRound])
+  }, [together, solo, session, beginRound])
 
   const setDir = useCallback((x, y) => {
     // never reverse straight back onto yourself.
@@ -188,7 +188,9 @@ export default function Snake({ onExit, onFinish, highScore }) {
     // wall
     if (nx < 0 || nx >= GRID || ny < 0 || ny >= GRID) { die(); return }
     // self
-    if (snake.some((s) => s.x === nx && s.y === ny)) { die(); return }
+    const growing = nx === foodRef.current.x && ny === foodRef.current.y
+    const occupied = growing ? snake : snake.slice(0, -1)
+    if (occupied.some((s) => s.x === nx && s.y === ny)) { die(); return }
     // either snake touching the other — both die.
     const ps = partnerRef.current
     const pBody = snakeCells(ps && ps.body)

@@ -116,11 +116,12 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies, myC
     const pb = partnerBirdRef.current
     const partnerInRound = duoRef.current && Boolean(pb && pb.round === roundRef.current && partnerOnlineRef.current)
     if (partnerInRound) {
+      finishRound()
       pendingRestartRef.current = true
     } else {
       setPhase('dead')
     }
-  }, [publish])
+  }, [publish, finishRound])
 
   const beginRound = useCallback((seed, startAt, round, withPartner = false) => {
     duoRef.current = withPartner
@@ -150,11 +151,12 @@ export default function FlappyBird({ onExit, onFinish, highScore, mySpecies, myC
   startRoundRef.current = startRound
 
   useEffect(() => {
-    if (!together) return
+    if (solo || (!together && !duoRef.current)) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
+    if (roundRef.current && !finishedRef.current) finishRound()
     beginRound(session.seed, session.startAt, session.round, true)
-  }, [together, session, beginRound])
+  }, [together, solo, session, beginRound, finishRound])
 
   const flap = useCallback(() => {
     if (phase !== 'running' || !aliveRef.current) return

@@ -1,7 +1,7 @@
 const TABS = [
   { id: 'home', label: 'home', icon: '🏠' },
   { id: 'games', label: 'games', icon: '🕹️' },
-  { id: 'park', label: 'park', icon: '🌳' },
+  { id: 'park', label: 'town', icon: '🌳' },
   { id: 'pet', label: 'pet', icon: '🐾' },
   { id: 'stats', label: 'stats', icon: '📊' },
   { id: 'chat', label: 'chat', icon: '💬' },

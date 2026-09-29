@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { applyDecay, daysAlive } from '../utils/petDecay'
-import { XP_PER_LEVEL } from '../utils/rewards'
+import { FOOD_ITEMS, XP_PER_LEVEL } from '../utils/rewards'
+import { claimActivity, recordActivity } from '../utils/dailyActivities'
+import { accessoryOf, normalizeHex } from '../utils/appearance'
+import { ANIMAL_KEYS } from '../utils/animals'
 
 const LEGACY_KEY = 'mehreenz-pet-v1'
 const keyFor = (identity) => `mehreenz-ali-pet-${identity || 'guest'}`
 
-const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(v)))
+const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v))
 
 function makeInitialPet() {
   const now = Date.now()
@@ -60,13 +63,7 @@ export function usePet(identity) {
   // slow live decay while the tab stays open (very light touch).
   useEffect(() => {
     const id = setInterval(() => {
-      setPet((prev) => ({
-        ...prev,
-        hunger: clamp(prev.hunger - 0.4),
-        happiness: clamp(prev.happiness - 0.3),
-        energy: clamp(prev.energy - 0.2),
-        lastVisit: Date.now(),
-      }))
+      setPet((prev) => applyDecay(prev, Date.now(), !document.hidden))
     }, 30000)
     return () => clearInterval(id)
   }, [setPet])
@@ -79,20 +76,21 @@ export function usePet(identity) {
 
   // choose which animal the pet is. optionally set a starting name and look.
   const setSpecies = useCallback((species, name, look = {}) => {
+    if (!ANIMAL_KEYS.includes(species)) return
     setPet((prev) => ({
       ...prev,
       species,
       name: name ? name.trim().toLowerCase().slice(0, 14) : prev.name,
-      color: look.color != null ? look.color : (prev.color ?? null),
-      accessory: look.accessory != null ? look.accessory : (prev.accessory || 'none'),
+      color: look.color != null ? normalizeHex(look.color) : (prev.color ?? null),
+      accessory: look.accessory != null ? accessoryOf(look.accessory) : (prev.accessory || 'none'),
     }))
   }, [setPet])
 
   const setLook = useCallback((look = {}) => {
     setPet((prev) => ({
       ...prev,
-      color: look.color !== undefined ? look.color : prev.color,
-      accessory: look.accessory !== undefined ? look.accessory : (prev.accessory || 'none'),
+      color: look.color !== undefined ? normalizeHex(look.color) : prev.color,
+      accessory: look.accessory !== undefined ? accessoryOf(look.accessory) : (prev.accessory || 'none'),
     }))
   }, [setPet])
 
@@ -141,6 +139,7 @@ export function usePet(identity) {
       return {
         ...prev,
         gamesPlayed: prev.gamesPlayed + 1,
+        daily: recordActivity(prev.daily, 'games', game),
         lastPlayed: Date.now(),
         highScores: {
           ...prev.highScores,
@@ -155,18 +154,25 @@ export function usePet(identity) {
   }, [pet.highScores])
 
   const feed = useCallback((item) => {
-    if (pet.coins < item.cost) return false
-    setPet((prev) => ({
+    const food = FOOD_ITEMS.find((entry) => entry.id === item?.id)
+    if (!food) return false
+    let purchased = false
+    setPet((prev) => {
+      if (prev.coins < food.cost) return prev
+      purchased = true
+      return {
       ...prev,
-      coins: prev.coins - item.cost,
-      hunger: clamp(prev.hunger + item.hunger),
-      happiness: clamp(prev.happiness + (item.happiness || 0)),
+      coins: prev.coins - food.cost,
+      daily: recordActivity(prev.daily, 'feed'),
+      hunger: clamp(prev.hunger + food.hunger),
+      happiness: clamp(prev.happiness + (food.happiness || 0)),
       health: clamp(prev.health + 2),
       lastFed: Date.now(),
       lastVisit: Date.now(),
-    }))
-    return true
-  }, [pet.coins, setPet])
+      }
+    })
+    return purchased
+  }, [setPet])
 
   const petThePet = useCallback(() => {
     setPet((prev) => ({
@@ -180,6 +186,9 @@ export function usePet(identity) {
   const resetPet = useCallback(() => {
     setPet(makeInitialPet())
   }, [setPet])
+
+  const visitTown = useCallback(() => setPet(prev => ({ ...prev, daily: recordActivity(prev.daily, 'town') })), [setPet])
+  const claimDaily = useCallback((id) => setPet(prev => claimActivity(prev, id)), [setPet])
 
   const days = useMemo(() => daysAlive(pet.startDate), [pet.startDate])
 
@@ -206,5 +215,7 @@ export function usePet(identity) {
     feed,
     petThePet,
     resetPet,
+    visitTown,
+    claimDaily,
   }
 }

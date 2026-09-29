@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usePet } from './hooks/usePet'
 import { useNotify } from './components/Notification'
 import { useRealtime, useWatch, usePartnerOnline } from './realtime/RealtimeContext'
@@ -16,11 +16,11 @@ import AnimalPicker from './components/AnimalPicker'
 import PetPage from './components/PetPage'
 import PetPark from './components/PetPark'
 import FloatingChat from './components/FloatingChat'
-import Wordle from './games/Wordle'
-import Tetris from './games/Tetris'
-import Snake from './games/Snake'
-import FlappyBird from './games/FlappyBird'
-import PacMan from './games/PacMan'
+const Wordle = lazy(() => import('./games/Wordle'))
+const Tetris = lazy(() => import('./games/Tetris'))
+const Snake = lazy(() => import('./games/Snake'))
+const FlappyBird = lazy(() => import('./games/FlappyBird'))
+const PacMan = lazy(() => import('./games/PacMan'))
 
 const PET_MESSAGES = [
   'your pet seems happy to see you',
@@ -47,7 +47,7 @@ export default function World({ identity, onLogout }) {
   const notify = useNotify()
 
   const {
-    pet, mood, days, setName, setSpecies, setLook, applyReward, recordGame, feed, petThePet, resetPet,
+    pet, mood, days, setName, setSpecies, setLook, applyReward, recordGame, feed, petThePet, resetPet, visitTown, claimDaily,
   } = usePet(identity)
 
   const partnerOnline = usePartnerOnline()
@@ -57,10 +57,12 @@ export default function World({ identity, onLogout }) {
 
   const [tab, setTab] = useState('home')
   const [activeGame, setActiveGame] = useState(null)
+  const [townRoom, setTownRoom] = useState('plaza')
   const [coinPop, setCoinPop] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   const [feeding, setFeeding] = useState(false)
   const [petting, setPetting] = useState(false)
+  useEffect(() => { if (tab === 'park') visitTown() }, [tab, visitTown])
 
   // publish a public snapshot of my pet whenever it meaningfully changes.
   useEffect(() => {
@@ -230,6 +232,7 @@ export default function World({ identity, onLogout }) {
         />
         <div className="game-layout">
           <main className="game-main">
+            <Suspense fallback={<div className="game-over-card" role="status">Getting your game ready…</div>}>
             {activeGame === 'wordle' && (
               <Wordle onExit={exit} onFinish={onGameFinish('wordle')} highScore={pet.highScores?.wordle || 0} />
             )}
@@ -245,6 +248,7 @@ export default function World({ identity, onLogout }) {
             {activeGame === 'pacman' && (
               <PacMan onExit={exit} onFinish={onGameFinish('pacman')} highScore={pet.highScores?.pacman || 0} mySpecies={pet.species} myColor={pet.color} myAccessory={pet.accessory} />
             )}
+            </Suspense>
           </main>
           <aside className="game-side">
             <FloatingChat identity={identity} partner={partner} partnerOnline={partnerOnline} docked />
@@ -288,6 +292,8 @@ export default function World({ identity, onLogout }) {
                 onFeed={() => setTab('feed')}
                 onPet={handlePet}
                 onVisitPark={() => setTab('park')}
+                onVisit={setTab}
+                onClaimDaily={claimDaily}
               />
             )}
             {tab === 'games' && <ArcadeMenu pet={pet} identity={identity} partner={partner} partnerOnline={partnerOnline} onSelect={startGame} />}
@@ -298,6 +304,10 @@ export default function World({ identity, onLogout }) {
                 myPet={{ species: pet.species, name: pet.name, mood, color: pet.color, accessory: pet.accessory }}
                 partnerPet={partnerPet} friendship={friendship}
                 partnerOnline={partnerOnline} notify={notify}
+                onVisit={setTab}
+                onPlay={startGame}
+                initialRoom={townRoom}
+                onRoomChange={setTownRoom}
               />
             )}
             {tab === 'pet' && (

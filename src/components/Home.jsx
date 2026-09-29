@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Pet from './Pet'
+import DailyActivities from './DailyActivities'
 import PetStats from './PetStats'
 import { FriendshipBar } from './Friendship'
 import { getTimeGreeting } from '../utils/timeGreeting'
@@ -10,7 +11,7 @@ import { lookFrom } from '../utils/appearance'
 export default function Home({
   pet, mood, coinPop, feeding, petting,
   partnerPet, partnerOnline, friendship, identity, partner,
-  onPlay, onFeed, onPet, onVisitPark,
+  onPlay, onFeed, onPet, onVisitPark, onClaimDaily, onVisit,
 }) {
   const [greeting, setGreeting] = useState(() => getTimeGreeting(''))
 
@@ -30,7 +31,7 @@ export default function Home({
   return (
     <div className="screen-enter stack">
       <div className="center">
-        <div className="greeting">mehreenz + ali</div>
+        <div className="greeting">mehreenz arcade</div>
         <div className="submessage">{greeting.trim()}</div>
       </div>
 
@@ -78,8 +79,9 @@ export default function Home({
       </div>
 
       <button className="btn btn-pink btn-glow big-park-btn" onClick={onVisitPark}>
-        🌳 visit the pet park
+        🌳 explore town
       </button>
+      <DailyActivities daily={pet.daily} onClaim={onClaimDaily} onVisit={onVisit} />
 
       <div className="section-head">
         <span className="title-pixel">your pet</span>

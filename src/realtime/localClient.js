@@ -99,7 +99,7 @@ export class LocalClient {
   notifyAll() {
     for (const [path, cbs] of this.watchers) {
       const val = getAt(this.tree, path)
-      cbs.forEach((cb) => cb(val))
+      cbs.forEach((cb) => cb(val == null ? val : structuredClone(val)))
     }
   }
 
@@ -108,7 +108,7 @@ export class LocalClient {
     for (const [wp, cbs] of this.watchers) {
       if (wp === changed || changed.startsWith(`${wp}/`) || wp.startsWith(`${changed}/`)) {
         const val = getAt(this.tree, wp)
-        cbs.forEach((cb) => cb(val))
+        cbs.forEach((cb) => cb(val == null ? val : structuredClone(val)))
       }
     }
   }
@@ -117,7 +117,8 @@ export class LocalClient {
     if (!this.watchers.has(path)) this.watchers.set(path, new Set())
     this.watchers.get(path).add(cb)
     // fire immediately with current value.
-    cb(getAt(this.tree, path))
+    const value = getAt(this.tree, path)
+    cb(value == null ? value : structuredClone(value))
     return () => {
       const set = this.watchers.get(path)
       if (set) {
@@ -164,6 +165,8 @@ export class LocalClient {
   // close the channel and drop watchers so a stale client from a previous
   // login cycle doesn't keep reacting to broadcasts.
   destroy() {
+    this.saveSoon.cancel()
+    this.saveCache()
     if (this.channel) {
       this.channel.onmessage = null
       this.channel.close()
@@ -175,10 +178,12 @@ export class LocalClient {
 
 function debounce(fn, ms) {
   let t
-  return (...args) => {
+  const debounced = (...args) => {
     clearTimeout(t)
     t = setTimeout(() => fn(...args), ms)
   }
+  debounced.cancel = () => clearTimeout(t)
+  return debounced
 }
 
 function deepMerge(a, b) {

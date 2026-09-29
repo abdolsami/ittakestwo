@@ -7,8 +7,8 @@ export default function Header({
   return (
     <header className="header">
       <div className="brand">
-        mehreenz + ali
-        <small>arcade &amp; pets</small>
+        mehreenz arcade
+        <small>your pet. your little world.</small>
       </div>
 
       <div className="header-right">

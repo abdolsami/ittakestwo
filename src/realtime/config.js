@@ -63,6 +63,7 @@ export const FIREBASE_CONFIG = {
 
 // true once a real firebase project has been pasted in above.
 export function isFirebaseConfigured() {
+  if (import.meta.env.DEV && env.VITE_LOCAL_PREVIEW === '1') return false
   return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL)
 }
 

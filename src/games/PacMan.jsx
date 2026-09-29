@@ -306,8 +306,6 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
   const ghostDrawRef = useRef([])
   const lastPayloadRef = useRef('')
   const lastWorldPayloadRef = useRef('')
-  const lastEatenCountRef = useRef(-1)
-  const lastWorldEatenRef = useRef(-1)
 
   const [phase, setPhase] = useState('idle')
   const [score, setScore] = useState(0)
@@ -369,10 +367,7 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
       fruitTake: fruitTakenRef.current,
       level: levelRef.current,
       round: roundRef.current,
-    }
-    if (force || eatenRef.current.size !== lastEatenCountRef.current) {
-      payload.eaten = [...eatenRef.current]
-      lastEatenCountRef.current = eatenRef.current.size
+      eaten: [...eatenRef.current],
     }
     if (!force && !shouldPublish(lastPayloadRef, payload)) return
     setPacmanPlayer(rt, payload)
@@ -389,10 +384,7 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
       level: levelRef.current,
       fruit: fruitRef.current,
       round: roundRef.current,
-    }
-    if (force || eatenRef.current.size !== lastWorldEatenRef.current) {
-      payload.eaten = [...eatenRef.current]
-      lastWorldEatenRef.current = eatenRef.current.size
+      eaten: [...eatenRef.current],
     }
     if (!force && !shouldPublish(lastWorldPayloadRef, payload)) return
     seqRef.current += 1
@@ -452,8 +444,6 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
     lastTimeRef.current = 0
     seqRef.current = 0
     lastWorldSeqRef.current = 0
-    lastEatenCountRef.current = -1
-    lastWorldEatenRef.current = -1
     ghostDrawRef.current = []
     dotsSig = -1
     seenGhostEatsRef.current = new Set()
@@ -477,11 +467,11 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
   }, [together, solo, partnerOnline, session, beginRound, rt])
 
   useEffect(() => {
-    if (!together) return
+    if (solo || (!together && !duoRef.current)) return
     if (!session || session.round == null) return
     if (session.round <= roundRef.current) return
     beginRound(session.startAt, session.round, true, session.by === rt.identity)
-  }, [together, session, beginRound, rt.identity])
+  }, [together, solo, session, beginRound, rt.identity])
 
   const queueDir = useCallback((x, y) => {
     if (!runningRef.current || !playerRef.current) return
@@ -504,11 +494,12 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
   const syncIncoming = () => {
     if (!duoRef.current) return
     const partnerLive = partnerRef.current
-    if (partnerLive && partnerLive.round === roundRef.current) {
+    if (partnerLive && partnerLive.round === roundRef.current && partnerLive.level === levelRef.current) {
       mergeEaten(partnerLive.eaten, false)
       if (hostRef.current) {
-        for (const id of listFrom(partnerLive.ateGhosts)) {
-          const tag = `${partnerLive.round}:${id}`
+        for (const capture of listFrom(partnerLive.ateGhosts)) {
+          const id = typeof capture === 'string' ? capture : capture.ghost
+          const tag = `${partnerLive.round}:${partnerLive.level}:${typeof capture === 'string' ? capture : capture.id}`
           if (seenGhostEatsRef.current.has(tag)) continue
           seenGhostEatsRef.current.add(tag)
           const ghost = ghostsRef.current.find((g) => g.id === id)
@@ -525,11 +516,11 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
     if (!w || w.round !== roundRef.current) return
     if ((w.seq || 0) <= lastWorldSeqRef.current) return
     lastWorldSeqRef.current = w.seq || 0
+    if (typeof w.level === 'number' && w.level > levelRef.current) refillMaze(w.level)
     mergeEaten(w.eaten, false)
     if (w.ghosts) ghostsRef.current = unpackGhosts(w.ghosts)
     if (typeof w.frightLeft === 'number') frightRef.current = Math.max(frightRef.current, w.frightLeft)
     fruitRef.current = w.fruit || null
-    if (typeof w.level === 'number' && w.level > levelRef.current) refillMaze(w.level)
   }
 
   useGameLoop((time) => {
@@ -540,9 +531,13 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
     const started = startAtRef.current != null && Date.now() >= startAtRef.current
     const player = playerRef.current
     const tiles = tilesRef.current
+    // End cleanly when the authority leaves; never leave a guest in a frozen maze.
+    if (runningRef.current && duoRef.current && !hostRef.current && !partnerOnline && Date.now() - startAtRef.current > 12000) finishRound()
     const live = runningRef.current && started && player && livesRef.current > 0
 
-    if (live) {
+    const partnerPlaying = partnerRef.current?.round === roundRef.current && partnerRef.current?.alive === true && partnerOnline
+    const simulate = live || (started && duoRef.current && hostRef.current && partnerPlaying)
+    if (simulate) {
         invulnRef.current = Math.max(0, invulnRef.current - dt)
         if (frightRef.current > 0) {
           frightRef.current = Math.max(0, frightRef.current - dt)
@@ -550,11 +545,11 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
         }
 
         const lvl = levelRef.current
-        moveOnGrid(player, dt, 6.3 + Math.min(1.1, (lvl - 1) * 0.12), tiles, 'player', (p) => choosePlayerDir(p, tiles))
+        if (live) moveOnGrid(player, dt, 6.3 + Math.min(1.1, (lvl - 1) * 0.12), tiles, 'player', (p) => choosePlayerDir(p, tiles))
 
         const tx = ((Math.round(player.x) % COLS) + COLS) % COLS
         const ty = Math.round(player.y)
-        if (ty >= 0 && ty < ROWS) applyEatenKey(`${ty},${tx}`, true)
+        if (live && ty >= 0 && ty < ROWS) applyEatenKey(`${ty},${tx}`, true)
 
         const host = !duoRef.current || hostRef.current
         if (host) {
@@ -579,7 +574,7 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
             }
             g.mode = g.eaten ? 'eyes' : (frightRef.current > 0 ? 'fright' : (scatter ? 'scatter' : 'chase'))
             const speed = g.eaten ? 9.2 : ghostSpeed
-            const others = duoRef.current ? [player, partnerAsPlayer(partnerRef.current, roundRef.current)] : [player]
+            const others = duoRef.current ? [live ? player : null, partnerAsPlayer(partnerRef.current, roundRef.current)] : [player]
             const hunt = closestPlayer(g, others.filter(Boolean))
             moveOnGrid(g, dt, speed, tiles, 'ghost', (ghost) => chooseGhostDir(ghost, tiles, hunt || player))
             if (g.eaten && houseTile(g.x, g.y)) reviveGhost(g)
@@ -591,13 +586,13 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
           }
         }
 
-        if (fruitRef.current && Math.abs(player.x - fruitRef.current.x) < 0.45 && Math.abs(player.y - fruitRef.current.y) < 0.45) {
+        if (live && fruitRef.current && Math.abs(player.x - fruitRef.current.x) < 0.45 && Math.abs(player.y - fruitRef.current.y) < 0.45) {
           scoreRef.current += 100
           fruitRef.current = null
           fruitTakenRef.current = true
         }
 
-        if (invulnRef.current === 0) {
+        if (live && invulnRef.current === 0) {
           for (const g of ghostsRef.current) {
             if (g.eaten) continue
             if (Math.abs(wrapDiff(player.x, g.x)) > 0.46 || Math.abs(player.y - g.y) > 0.46) continue
@@ -605,7 +600,7 @@ export default function PacMan({ onExit, onFinish, highScore, mySpecies, myColor
               g.eaten = true
               comboRef.current += 1
               scoreRef.current += 200 * (2 ** (comboRef.current - 1))
-              if (!ateGhostsRef.current.includes(g.id)) ateGhostsRef.current = [...ateGhostsRef.current, g.id]
+              ateGhostsRef.current = [...ateGhostsRef.current, { ghost: g.id, id: crypto.randomUUID() }]
             } else {
               loseLife()
               break

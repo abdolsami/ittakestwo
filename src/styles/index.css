@@ -34,8 +34,7 @@ body {
   background: var(--bg-1);
   color: var(--ink);
   overflow: hidden;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  -webkit-font-smoothing: antialiased;
   text-transform: lowercase;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -50,6 +49,7 @@ button {
 
 /* ===== scanline / CRT overlay ===== */
 .crt::after {
+  opacity: 0.08;
   content: '';
   position: fixed;
   inset: 0;
@@ -63,7 +63,7 @@ button {
       rgba(0, 0, 0, 0.18) 3px,
       rgba(0, 0, 0, 0.18) 4px
     );
-  mix-blend-mode: multiply;
+  /* Keep the arcade texture subtle enough to preserve text and sprite contrast. */
 }
 
 .crt::before {
